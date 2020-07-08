@@ -10,8 +10,6 @@
 #include "volume.h"
 #include "ctx.h"
 
-#define PAGE_SIZE 4096
-
 /*
  * Allocate structure representing data for io operations.
  */
@@ -186,7 +184,7 @@ static void ctx_metadata_updater_stop(ocf_metadata_updater_t mu)
 }
 
 /*
- * Function prividing interface for printing to log used by OCF internals.
+ * Function providing interface for printing to log used by OCF internals.
  * It can handle differently messages at various log levels.
  */
 static int ctx_logger_print(ocf_logger_t logger, ocf_logger_lvl_t lvl,

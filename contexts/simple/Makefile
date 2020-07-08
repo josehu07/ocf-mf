@@ -34,4 +34,4 @@ distclean:
 	@rm -rf src/ocf
 	@rm -rf include/ocf
 
-.PHONY: all clean
+.PHONY: all sync clean distclean
