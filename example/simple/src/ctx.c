@@ -187,7 +187,7 @@ static void ctx_metadata_updater_stop(ocf_metadata_updater_t mu)
 
 /*
  * Function prividing interface for printing to log used by OCF internals.
- * It can handle differently messages at varous log levels.
+ * It can handle differently messages at various log levels.
  */
 static int ctx_logger_print(ocf_logger_t logger, ocf_logger_lvl_t lvl,
 		const char *fmt, va_list args)
@@ -230,7 +230,7 @@ static int ctx_logger_dump_stack(ocf_logger_t logger)
  * This structure describes context config, containing simple context info
  * and pointers to ops callbacks. Ops are splitted into few categories:
  * - data ops, providing context specific data handing interface,
- * - cleaner ops, providing interface to start and stop clener thread,
+ * - cleaner ops, providing interface to start and stop cleaner thread,
  * - metadata updater ops, providing interface for starting, stoping
  *   and kicking metadata updater thread.
  * - logger ops, providing interface for text message logging

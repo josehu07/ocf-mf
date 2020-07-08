@@ -81,7 +81,7 @@ struct simple_context {
  */
 static void simple_complete(ocf_cache_t cache, void *priv, int error)
 {
-	struct simple_context *context= priv;
+	struct simple_context *context = priv;
 
 	*context->error = error;
 }
@@ -280,7 +280,7 @@ int submit_io(ocf_core_t core, struct volume_data *data,
  * 1. Allocate data buffer for write and write it with example data.
  * 2. Allocate new io, configure it for write, setup completion callback
  *    and perform write to the core.
- * 3. Wait for write io completion (write is handled synchronosly, so no
+ * 3. Wait for write io completion (write is handled synchronously, so no
  *    actual wait is needed, but in real life we would need to use some
  *    synchronization to be sure, that completion function has been already
  *    called). Alternatively we could issue read io from write completion
