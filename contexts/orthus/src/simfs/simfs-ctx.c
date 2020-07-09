@@ -1,5 +1,5 @@
 /**
- * Defines the `twovol` context-specific operations to fulfill OCF
+ * Defines the `simfs` context-specific operations to fulfill OCF
  * interface requirements.
  * 
  * The interface type `ctx_data_t` in OCF is supposed to describe the
@@ -7,14 +7,34 @@
  * being I/Oed.
  *
  * It is typedefed as `void` in OCF interface. We cast it to our context-
- * specific `twovol_data_t` to hook up with OCF interface.
+ * specific `simfs_data_t` to hook up with OCF interface.
  */
 
 
 #include <execinfo.h>
+#include <stdarg.h>
 #include <ocf/ocf.h>
 #include "ocf_env.h"
-#include "twovol-ctx.h"
+
+#include "simfs-ctx.h"
+
+
+/**
+ * Debug printing.
+ */
+static inline void
+debug(const char *fmt, ...)
+{
+    va_list args;
+
+    printf("[CONTEXT] ");
+
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
+
+    printf("\n");
+}
 
 
 /**
@@ -23,7 +43,7 @@
  * Used as a subroutine in several operations below.
  */
 static uint32_t
-valid_size_from_offset(twovol_data_t *data, uint32_t size)
+valid_size_from_offset(simfs_data_t *data, uint32_t size)
 {
     uint32_t available_size, valid_size;
 
@@ -39,7 +59,7 @@ valid_size_from_offset(twovol_data_t *data, uint32_t size)
  * Used as a subroutine in several operations below.
  */
 static uint32_t
-valid_size_from_begin(twovol_data_t *data, uint32_t size)
+valid_size_from_begin(simfs_data_t *data, uint32_t size)
 {
     uint32_t available_size, valid_size;
 
@@ -60,11 +80,11 @@ valid_size_from_begin(twovol_data_t *data, uint32_t size)
  * code in main.c.
  */
 ctx_data_t *
-twovol_data_alloc(uint32_t pages)
+simfs_data_alloc(uint32_t pages)
 {
-    twovol_data_t *data;
+    simfs_data_t *data;
 
-    data = malloc(sizeof(twovol_data_t));
+    data = malloc(sizeof(simfs_data_t));
     data->ptr = malloc(pages * PAGE_SIZE);
     data->offset = 0;
     data->pages = pages;
@@ -76,9 +96,9 @@ twovol_data_alloc(uint32_t pages)
  * Free the OS data structure.
  */
 void
-twovol_data_free(ctx_data_t *twovol_data)
+simfs_data_free(ctx_data_t *simfs_data)
 {
-    twovol_data_t *data = twovol_data;
+    simfs_data_t *data = simfs_data;
 
     if (data != NULL) {
         free(data->ptr);
@@ -91,9 +111,9 @@ twovol_data_free(ctx_data_t *twovol_data)
  * Can be unimplemented if not needed.
  */
 static int
-twovol_data_mlock(ctx_data_t *twovol_data)
+simfs_data_mlock(ctx_data_t *simfs_data)
 {
-    return 0;
+    return 0;   /** Unimplemented. */
 }
 
 /**
@@ -101,20 +121,20 @@ twovol_data_mlock(ctx_data_t *twovol_data)
  * Can be unimplemented if not needed.
  */
 static void
-twovol_data_munlock(ctx_data_t *twovol_data)
+simfs_data_munlock(ctx_data_t *simfs_data)
 {
-    return;
+    return;     /** Unimplemented. */
 }
 
 /**
  * Read data from OS data buffer into destination app location.
  */
 static uint32_t
-twovol_data_read(void *dst, ctx_data_t *twovol_data, uint32_t size)
+simfs_data_read(void *dst, ctx_data_t *simfs_data, uint32_t size)
 {
     uint32_t read_size;
 
-    twovol_data_t *data = twovol_data;
+    simfs_data_t *data = simfs_data;
 
     read_size = valid_size_from_offset(data, size);
     memcpy(dst, data->ptr + data->offset, read_size);
@@ -126,11 +146,11 @@ twovol_data_read(void *dst, ctx_data_t *twovol_data, uint32_t size)
  * Write data from source app location into OS data buffer.
  */
 static uint32_t
-twovol_data_write(ctx_data_t *twovol_data, const void *src, uint32_t size)
+simfs_data_write(ctx_data_t *simfs_data, const void *src, uint32_t size)
 {
     uint32_t write_size;
 
-    twovol_data_t *data = twovol_data;
+    simfs_data_t *data = simfs_data;
 
     write_size = valid_size_from_offset(data, size);
     memcpy(data->ptr + data->offset, src, write_size);
@@ -142,11 +162,11 @@ twovol_data_write(ctx_data_t *twovol_data, const void *src, uint32_t size)
  * Fill data buffer with zeros.
  */
 static uint32_t
-twovol_data_zero(ctx_data_t *twovol_data, uint32_t size)
+simfs_data_zero(ctx_data_t *simfs_data, uint32_t size)
 {
     uint32_t zero_size;
 
-    twovol_data_t *data = twovol_data;
+    simfs_data_t *data = simfs_data;
 
     zero_size = valid_size_from_offset(data, size);
     memset(data->ptr + data->offset, 0, zero_size);
@@ -158,12 +178,12 @@ twovol_data_zero(ctx_data_t *twovol_data, uint32_t size)
  * Seek on data buffer, changing the offset.
  */
 static uint32_t
-twovol_data_seek(ctx_data_t *twovol_data, ctx_data_seek_t seek,
+simfs_data_seek(ctx_data_t *simfs_data, ctx_data_seek_t seek,
                  uint32_t size)
 {
     uint32_t seek_size;
 
-    twovol_data_t *data = twovol_data;
+    simfs_data_t *data = simfs_data;
 
     switch (seek) {
     case ctx_data_seek_begin:
@@ -183,11 +203,11 @@ twovol_data_seek(ctx_data_t *twovol_data, ctx_data_seek_t seek,
  * Copy from one data buffer to another. NOT performing size checks.
  */
 static uint64_t
-twovol_data_copy(ctx_data_t *twovol_data_dst, ctx_data_t *twovol_data_src,
+simfs_data_copy(ctx_data_t *simfs_data_dst, ctx_data_t *simfs_data_src,
               uint64_t dst_offset, uint64_t src_offset, uint64_t bytes)
 {
-    twovol_data_t *data_dst = twovol_data_dst;
-    twovol_data_t *data_src = twovol_data_src;
+    simfs_data_t *data_dst = simfs_data_dst;
+    simfs_data_t *data_src = simfs_data_src;
 
     memcpy(data_dst->ptr + dst_offset, data_src->ptr + src_offset, bytes);
 
@@ -199,7 +219,7 @@ twovol_data_copy(ctx_data_t *twovol_data_dst, ctx_data_t *twovol_data_src,
  * Can be unimplemented if not needed.
  */
 static void
-twovol_data_secure_erase(ctx_data_t *twovol_data)
+simfs_data_secure_erase(ctx_data_t *simfs_data)
 {
     return;
 }
@@ -210,7 +230,7 @@ twovol_data_secure_erase(ctx_data_t *twovol_data)
  * cache system automatically, controlled by a cleaning policy.
  */
 static int
-twovol_cleaner_init(ocf_cleaner_t cleaner)
+simfs_cleaner_init(ocf_cleaner_t cleaner)
 {
     return 0;   /** Unimplemented. */
 }
@@ -219,18 +239,18 @@ twovol_cleaner_init(ocf_cleaner_t cleaner)
  * Kick off cleaner thread.
  */
 static void
-twovol_cleaner_kick(ocf_cleaner_t cleaner)
+simfs_cleaner_kick(ocf_cleaner_t cleaner)
 {
-    return;
+    return;     /** Unimplemented. */
 }
 
 /**
  * Stop cleaner thread.
  */
 static void
-twovol_cleaner_stop(ocf_cleaner_t cleaner)
+simfs_cleaner_stop(ocf_cleaner_t cleaner)
 {
-    return;
+    return;     /** Unimplemented. */
 }
 
 /**
@@ -238,7 +258,7 @@ twovol_cleaner_stop(ocf_cleaner_t cleaner)
  * Metadata updater refers to ??? [TODO].
  */
 static int
-twovol_metadata_updater_init(ocf_metadata_updater_t metadata_updater)
+simfs_metadata_updater_init(ocf_metadata_updater_t metadata_updater)
 {
     return 0;   /** Unimplemented. */
 }
@@ -247,18 +267,18 @@ twovol_metadata_updater_init(ocf_metadata_updater_t metadata_updater)
  * Kick off metadata updater thread.
  */
 static void
-twovol_metadata_updater_kick(ocf_metadata_updater_t metadata_updater)
+simfs_metadata_updater_kick(ocf_metadata_updater_t metadata_updater)
 {
-    return;
+    return;     /** Unimplemented. */
 }
 
 /**
  * Stop metadata updater thread.
  */
 static void
-twovol_metadata_updater_stop(ocf_metadata_updater_t metadata_updater)
+simfs_metadata_updater_stop(ocf_metadata_updater_t metadata_updater)
 {
-    return;
+    return;     /** Unimplemented. */
 }
 
 /**
@@ -266,7 +286,7 @@ twovol_metadata_updater_stop(ocf_metadata_updater_t metadata_updater)
  * The lower level, the more urgent.
  */
 static int
-twovol_logger_print(ocf_logger_t logger, ocf_logger_lvl_t lvl,
+simfs_logger_print(ocf_logger_t logger, ocf_logger_lvl_t lvl,
                  const char *fmt, va_list args)
 {
     FILE *logfile;
@@ -286,7 +306,7 @@ twovol_logger_print(ocf_logger_t logger, ocf_logger_lvl_t lvl,
  * `simple` example.
  */
 static int
-twovol_logger_dump_stack(ocf_logger_t logger)
+simfs_logger_dump_stack(ocf_logger_t logger)
 {
     void *trace[STACK_TRACE_DEPTH];
     char **messages = NULL;
@@ -305,80 +325,75 @@ twovol_logger_dump_stack(ocf_logger_t logger)
     return 0;
 }
 
-/******* OCF Context Operations Implemention END. *******/
-
 
 /**
  * This structure assigns the above implementations to the OCF interface.
  * Interface functions are splitted into four categories.
  */
-static const struct ocf_ctx_config twovol_cfg = {
-    .name = "Two Volume Context",
+static const struct ocf_ctx_config simfs_ctx_cfg = {
+    .name = "Linux FS Context",
 
     .ops = {
         .data = {
-            .alloc = twovol_data_alloc,
-            .free = twovol_data_free,
-            .mlock = twovol_data_mlock,
-            .munlock = twovol_data_munlock,
-            .read = twovol_data_read,
-            .write = twovol_data_write,
-            .zero = twovol_data_zero,
-            .seek = twovol_data_seek,
-            .copy = twovol_data_copy,
-            .secure_erase = twovol_data_secure_erase,
+            .alloc = simfs_data_alloc,
+            .free = simfs_data_free,
+            .mlock = simfs_data_mlock,
+            .munlock = simfs_data_munlock,
+            .read = simfs_data_read,
+            .write = simfs_data_write,
+            .zero = simfs_data_zero,
+            .seek = simfs_data_seek,
+            .copy = simfs_data_copy,
+            .secure_erase = simfs_data_secure_erase,
         },
 
         .cleaner = {
-            .init = twovol_cleaner_init,
-            .kick = twovol_cleaner_kick,
-            .stop = twovol_cleaner_stop,
+            .init = simfs_cleaner_init,
+            .kick = simfs_cleaner_kick,
+            .stop = simfs_cleaner_stop,
         },
 
         .metadata_updater = {
-            .init = twovol_metadata_updater_init,
-            .kick = twovol_metadata_updater_kick,
-            .stop = twovol_metadata_updater_stop,
+            .init = simfs_metadata_updater_init,
+            .kick = simfs_metadata_updater_kick,
+            .stop = simfs_metadata_updater_stop,
         },
 
         .logger = {
-            .print = twovol_logger_print,
-            .dump_stack = twovol_logger_dump_stack,
+            .print = simfs_logger_print,
+            .dump_stack = simfs_logger_dump_stack,
         },
     },
 };
 
+/******* OCF Context Operations Implemention END. *******/
+
 
 /**
- * Initialize the `twovol` context, assigning the above operation
- * implementations to the OCF interface. Volume types also registered
- * here.
+ * Initialize the `simfs` context, assigning the above operation
+ * implementations to the OCF interface.
  */
 int
-twovol_ctx_init(ocf_ctx_t *ctx)
+simfs_ctx_init(ocf_ctx_t *ctx)
 {
     int ret;
 
-    ret = ocf_ctx_create(ctx, &twovol_cfg);
+    ret = ocf_ctx_create(ctx, &simfs_ctx_cfg);
     if (ret)
         return ret;
 
-    // ret = volume_init(*ctx);
-    // if (ret) {
-    //     ocf_ctx_put(*ctx);
-    //     return ret;
-    // }
+    debug("INIT: done");
 
     return 0;
 }
 
 /**
- * Clean up the context. Deregisters volume types and deinitializes
- * the context.
+ * Clean up the context.
  */
 void
-twovol_ctx_cleanup(ocf_ctx_t ctx)
+simfs_ctx_cleanup(ocf_ctx_t ctx)
 {
-    // volume_cleanup(ctx);
     ocf_ctx_put(ctx);
+
+    debug("CLEANUP: done");
 }

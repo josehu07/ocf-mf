@@ -1,5 +1,5 @@
 #
-# Makefile for `twovol` example context.
+# Makefile for the `orthus` example use case.
 #
 
 OCFDIR=../../
@@ -8,7 +8,7 @@ INCDIR=include/
 
 SRC=$(shell find ${SRCDIR} -name \*.c)
 OBJS=$(patsubst %.c, %.o, $(SRC))
-PROGRAM=twovol
+PROGRAM=orthus
 
 CC=gcc
 CFLAGS=-g -Wall -I${INCDIR} -I${SRCDIR}/ocf/env/
@@ -28,9 +28,9 @@ sync:
 clean:
 	@rm -rf $(PROGRAM) $(OBJS)
 
-distclean:
+libclean:
 	@rm -rf $(PROGRAM) $(OBJS)
 	@rm -rf src/ocf
 	@rm -rf include/ocf
 
-.PHONY: all sync clean distclean
+.PHONY: all sync clean libclean

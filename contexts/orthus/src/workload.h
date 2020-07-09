@@ -6,11 +6,11 @@
  */
 
 
-#ifndef _WORKLOAD_H_
-#define _WORKLOAD_H_
+#ifndef __WORKLOAD_H__
+#define __WORKLOAD_H__
 
 
-void perform_workload(ocf_core_t core);
+int perform_workload(ocf_core_t core);
 
 
 #endif
