@@ -96,9 +96,12 @@ cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache)
      * 
      * We are using memory to simulate a cache device, so we set the
      * volatile property to true.
+     *
+     * We are using our new Multi-factor cache mode.
      */
     ocf_mngt_cache_config_set_default(&cache_cfg);
     cache_cfg.metadata_volatile = true;
+    cache_cfg.cache_mode = ocf_cache_mode_mf;
 
     /**
      * Set cache device configuration to default, and assign volume type

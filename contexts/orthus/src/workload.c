@@ -102,27 +102,26 @@ submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
 
 /**
  * Perform the following simple workload:
- *     1. write a string
- *     2. read out the string
- *     3. compare
+ *     1. write a string A
+ *     2. read out string A
+ *     3. write a string B to the same address
+ *     4. read out string B
+ *     5. write a string C to a new address (no overlapping lines)
+ *     6. read out string C
  */
 int
 perform_workload(ocf_core_t core)
 {
-    simfs_data_t *data1, *data2;
+    simfs_data_t *data1, *data2, *data3, *data4, *data5, *data6;
     int ret;
 
-    /**
-     * Setup the scenario where there is data to write in a Linux FS
-     * data buffer `data1`.
-     */
+    /** 1. Write the first string. */
     data1 = simfs_data_alloc(1);
     if (data1 == NULL)
         return -ENOMEM;
 
-    strcpy(data1->ptr, "<<< This is some test data ABCDEFGH ;) >>>");
+    strcpy(data1->ptr, "<<< THIS IS SOME TEST DATA (Part A) >>>");
 
-    /** Prepare & submit I/O to core. */
     ret = submit_io(core, data1, 0, 512, OCF_WRITE, write_cmpl_callback);
     if (ret)
         return ret;
@@ -133,13 +132,64 @@ perform_workload(ocf_core_t core)
      *       doing actual waiting.
      */
     
-    /** Setup OS data buffer for reading out the data. */
+    /** 2. Read the first string. */
     data2 = simfs_data_alloc(1);
     if (data2 == NULL)
         return -ENOMEM;
 
-    /** Prepare & submit I/O to core. */
     submit_io(core, data2, 0, 512, OCF_READ, read_cmpl_callback);
+    if (ret)
+        return ret;
+
+    /** 3. Write the second string to the same address. */
+    data3 = simfs_data_alloc(1);
+    if (data3 == NULL)
+        return -ENOMEM;
+
+    strcpy(data3->ptr, "<<< YET SOME OTHER TEST DATA (Part B) >>>");
+
+    ret = submit_io(core, data3, 0, 512, OCF_WRITE, write_cmpl_callback);
+    if (ret)
+        return ret;
+
+    /**
+     * We should wait here until this write is complete.
+     * TODO: Now since async queue is implemented as sync, we are not
+     *       doing actual waiting.
+     */
+    
+    /** 4. Read the second string. */
+    data4 = simfs_data_alloc(1);
+    if (data4 == NULL)
+        return -ENOMEM;
+
+    submit_io(core, data4, 0, 512, OCF_READ, read_cmpl_callback);
+    if (ret)
+        return ret;
+
+    /** 5. Write the third string to a new non-overlapping address. */
+    data5 = simfs_data_alloc(1);
+    if (data5 == NULL)
+        return -ENOMEM;
+
+    strcpy(data5->ptr, "<<< AND SOME NEW TEST DATA (Part C) >>>");
+
+    ret = submit_io(core, data5, 8192, 512, OCF_WRITE, write_cmpl_callback);
+    if (ret)
+        return ret;
+
+    /**
+     * We should wait here until this write is complete.
+     * TODO: Now since async queue is implemented as sync, we are not
+     *       doing actual waiting.
+     */
+    
+    /** 6. Read the third string. */
+    data6 = simfs_data_alloc(1);
+    if (data6 == NULL)
+        return -ENOMEM;
+
+    submit_io(core, data6, 8192, 512, OCF_READ, read_cmpl_callback);
     if (ret)
         return ret;
 

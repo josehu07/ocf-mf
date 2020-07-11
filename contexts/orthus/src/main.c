@@ -6,9 +6,12 @@
  *     - a larger backend storage volume (64MiB)
  *     
  * Performing a simple workload:
- *     1. write a string
- *     2. read out the string
- *     3. compare
+ *     1. write a string A
+ *     2. read out string A
+ *     3. write a string B to the same address
+ *     4. read out string B
+ *     5. write a string C to a new address (no overlapping lines)
+ *     6. read out string C
  */
 
 
