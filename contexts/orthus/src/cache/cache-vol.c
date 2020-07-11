@@ -8,7 +8,7 @@
 #include <stdarg.h>
 #include <ocf/ocf.h>
 
-#include "../simfs/simfs-ctx.h"
+#include "simfs/simfs-ctx.h"
 #include "cache-vol.h"
 
 
@@ -47,8 +47,8 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
     vol_priv->addr = malloc(CACHE_VOL_SIZE);
     vol_priv->capacity = CACHE_VOL_SIZE;
 
-    debug("OPEN: name = %s, capacity = %lu",
-          vol_priv->name, vol_priv->capacity);
+    debug("OPEN: name = %s, addr = %#x, capacity = %lu",
+          vol_priv->name, vol_priv->addr, vol_priv->capacity);
 
     return 0;
 }

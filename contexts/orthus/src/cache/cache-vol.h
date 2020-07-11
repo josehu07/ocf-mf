@@ -10,7 +10,7 @@
 #include <ocf/ocf.h>
 #include "ocf_env.h"
 
-#include "../simfs/simfs-ctx.h"
+#include "simfs/simfs-ctx.h"
 
 
 #define CACHE_VOL_TYPE (1)
