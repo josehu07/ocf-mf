@@ -30,7 +30,7 @@ debug(const char *fmt, ...)
 }
 
 
-/******* Cache Volume Operations Implemention BEGIN. *******/
+/*========== Cache Volume Operations Implemention BEGIN. ==========*/
 
 /**
  * Open a volume.
@@ -198,7 +198,7 @@ const struct ocf_volume_properties cache_vol_properties = {
     },
 };
 
-/******* Cache Volume Operations Implemention END. *******/
+/*========== Cache Volume Operations Implemention END. ==========*/
 
 
 /**

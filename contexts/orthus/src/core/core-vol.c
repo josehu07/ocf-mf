@@ -30,7 +30,7 @@ debug(const char *fmt, ...)
 }
 
 
-/******* Core Volume Operations Implemention BEGIN. *******/
+/*========== Core Volume Operations Implemention BEGIN. ==========*/
 
 /**
  * Open a volume.
@@ -198,7 +198,7 @@ const struct ocf_volume_properties core_vol_properties = {
     },
 };
 
-/******* Core Volume Operations Implemention END. *******/
+/*========== Core Volume Operations Implemention END. ==========*/
 
 
 /**

@@ -70,7 +70,7 @@ valid_size_from_begin(simfs_data_t *data, uint32_t size)
 }
 
 
-/******* OCF Context Operations Implemention BEGIN. *******/
+/*========== OCF Context Operations Implemention BEGIN. ==========*/
 
 /**
  * Allocate the OS data structure for an I/O, occupying specified number
@@ -366,7 +366,7 @@ static const struct ocf_ctx_config simfs_ctx_cfg = {
     },
 };
 
-/******* OCF Context Operations Implemention END. *******/
+/*========== OCF Context Operations Implemention END. ==========*/
 
 
 /**

@@ -8,7 +8,7 @@
 #include "queue.h"
 
 
-/******* Customized queue implementation BEGIN. *******/
+/*========== Customized queue implementation BEGIN. ==========*/
 
 /**
  * Trigger queue asynchronously.
@@ -53,4 +53,4 @@ struct ocf_queue_ops queue_ops = {
     .stop = queue_stop,
 };
 
-/******* Customized queue implementation END. *******/
+/*========== Customized queue implementation END. ==========*/
