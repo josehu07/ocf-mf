@@ -11,9 +11,8 @@
 /*========== Customized queue implementation BEGIN. ==========*/
 
 /**
- * Trigger queue asynchronously.
- * TODO: Here we simply make it synchronous. Definitely should make
- *       an actual asynchronous implementation.
+ * Trigger queue asynchronously. Asynchronous kick is basically used
+ * in management queue only.
  */
 static void
 queue_kick_async(ocf_queue_t queue)

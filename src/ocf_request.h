@@ -21,7 +21,7 @@ struct ocf_req_info {
 	/*!< Number of dirty line in request*/
 
 	uint32_t dirty_any;
-	/*!< Indicates that at least one request is dirty */
+	/*!< Indicates that at least one line is dirty */
 
 	uint32_t seq_req : 1;
 	/*!< Sequential cache request flag. */
@@ -187,6 +187,12 @@ struct ocf_request {
 
 	uint8_t seq_cutoff : 1;
 	/*!< Sequential cut off set for this request */
+
+	uint8_t data_admit_allowed : 1;
+	/**!< Multi-factor data_admit allowed flag. */	
+
+	uint8_t load_admit_allowed : 1;
+	/**!< Multi-factor load_admit allowed flag. */
 
 	log_sid_t sid;
 	/*!< Tracing sequence ID */

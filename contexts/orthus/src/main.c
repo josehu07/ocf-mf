@@ -18,6 +18,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <unistd.h>
+#include <time.h>
 #include <ocf/ocf.h>
 
 #include "simfs/simfs-ctx.h"
@@ -25,6 +27,7 @@
 #include "cache/cache-obj.h"
 #include "core/core-vol.h"
 #include "core/core-obj.h"
+#include "monitor/monitor.h"
 #include "workload.h"
 
 
@@ -67,6 +70,8 @@ main(int argc, char *argv[])
     ocf_core_t core;
     int ret;
 
+    srand(time(NULL));
+
     /** 1. Initialize OCF context. */
     ret = simfs_ctx_init(&ctx);
     if (ret)
@@ -91,26 +96,42 @@ main(int argc, char *argv[])
     if (ret)
         error("Unable to initialize core", ret);
 
-    /** 5. Perform a simple workload. */
+    /** 5. Init and start the monitor. */
+    ret = monitor_init();
+    if (ret)
+        error("Unable to start monitor thread", ret);
+
+    /** 6. Perform a simple workload. */
     ret = perform_workload(core);
     if (ret)
-        error("Error when performing workload", ret);
+        error("Error when performing workload (1)", ret);
 
-    /** 6. Stop and detach core from cache. */
+    /**
+     * 7. Wait several secs to let the monitor kick in and make
+     *    a config change.
+     */
+    sleep(2);
+
+    /** 8. Perform the workload again to check config change. */
+    ret = perform_workload(core);
+    if (ret)
+        error("Error when performing workload (2)", ret);
+
+    /** 9. Stop and detach core from cache. */
     ret = core_obj_stop(core);
     if (ret)
         error("Unable to stop core", ret);
 
-    /** 7. Stop the cache. */
+    /** 10. Stop the cache. */
     ret = cache_obj_stop(cache);
     if (ret)
         error("Unable to stop cache", ret);
 
-    /** 8. Unregister volume types. */
+    /** 11. Unregister volume types. */
     core_vol_unregister(ctx);
     cache_vol_unregister(ctx);
 
-    /** 9. Cleanup this context. */
+    /** 12. Cleanup this context. */
     simfs_ctx_cleanup(ctx);
 
     return 0;
