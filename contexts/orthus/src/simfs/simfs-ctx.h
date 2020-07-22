@@ -34,7 +34,6 @@ typedef struct simfs_data simfs_data_t;
 ctx_data_t *simfs_data_alloc(uint32_t pages);
 void simfs_data_free(ctx_data_t *simfs_data);
 
-
 int simfs_ctx_init(ocf_ctx_t *ctx);
 void simfs_ctx_cleanup(ocf_ctx_t ctx);
 

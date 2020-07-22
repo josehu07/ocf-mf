@@ -4,14 +4,6 @@
  * Simulating a config of two volumes:
  *     - a small cache volume (32MiB)
  *     - a larger backend storage volume (64MiB)
- *     
- * Performing a simple workload:
- *     1. write a string A
- *     2. read out string A
- *     3. write a string B to the same address
- *     4. read out string B
- *     5. write a string C to a new address (no overlapping lines)
- *     6. read out string C
  */
 
 
@@ -28,7 +20,8 @@
 #include "core/core-vol.h"
 #include "core/core-obj.h"
 #include "monitor/monitor.h"
-#include "workload.h"
+#include "workload/simple.h"
+#include "workload/fuzzy-test.h"
 
 
 /**
@@ -70,6 +63,7 @@ main(int argc, char *argv[])
     ocf_core_t core;
     int ret;
 
+    /** 0. Set random seed. */
     srand(time(NULL));
 
     /** 1. Initialize OCF context. */
@@ -97,41 +91,30 @@ main(int argc, char *argv[])
         error("Unable to initialize core", ret);
 
     /** 5. Init and start the monitor. */
-    ret = monitor_init();
+    ret = monitor_init(core);
     if (ret)
         error("Unable to start monitor thread", ret);
 
-    /** 6. Perform a simple workload. */
-    ret = perform_workload(core);
+    /** 6. Perform workload. */
+    ret = perform_workload_fuzzy(core, 12000);
     if (ret)
-        error("Error when performing workload (1)", ret);
+        error("Error when performing workload", ret);
 
-    /**
-     * 7. Wait several secs to let the monitor kick in and make
-     *    a config change.
-     */
-    sleep(2);
-
-    /** 8. Perform the workload again to check config change. */
-    ret = perform_workload(core);
-    if (ret)
-        error("Error when performing workload (2)", ret);
-
-    /** 9. Stop and detach core from cache. */
+    /** 7. Stop and detach core from cache. */
     ret = core_obj_stop(core);
     if (ret)
         error("Unable to stop core", ret);
 
-    /** 10. Stop the cache. */
+    /** 8. Stop the cache. */
     ret = cache_obj_stop(cache);
     if (ret)
         error("Unable to stop cache", ret);
 
-    /** 11. Unregister volume types. */
+    /** 9. Unregister volume types. */
     core_vol_unregister(ctx);
     cache_vol_unregister(ctx);
 
-    /** 12. Cleanup this context. */
+    /** 10. Cleanup this context. */
     simfs_ctx_cleanup(ctx);
 
     return 0;

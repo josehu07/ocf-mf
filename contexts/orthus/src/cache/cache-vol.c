@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <ocf/ocf.h>
 
+#include "../common.h"
 #include "simfs/simfs-ctx.h"
 #include "cache-vol.h"
 
@@ -18,15 +19,17 @@
 static inline void
 debug(const char *fmt, ...)
 {
-    va_list args;
+    if (CTX_PRINT_DEBUG_MSG) {
+        va_list args;
 
-    printf("[CACHE VOL] ");
+        printf("[CACHE VOL] ");
 
-    va_start(args, fmt);
-    vprintf(fmt, args);
-    va_end(args);
+        va_start(args, fmt);
+        vprintf(fmt, args);
+        va_end(args);
 
-    printf("\n");
+        printf("\n");
+    }
 }
 
 
@@ -47,7 +50,9 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
     vol_priv->addr = malloc(CACHE_VOL_SIZE);
     vol_priv->capacity = CACHE_VOL_SIZE;
 
-    debug("OPEN: name = %s, addr = %#lx, capacity = %lu",
+    memset(vol_priv->addr, 0, CACHE_VOL_SIZE);
+
+    debug("OPEN: name = %s, mem = 0x%08lx, capacity = %lu",
           vol_priv->name, vol_priv->addr, vol_priv->capacity);
 
     return 0;
@@ -88,7 +93,7 @@ cache_vol_submit_io(struct ocf_io *io)
         break;
     }
 
-    debug("IO: name = %s, dir = %s, addr = %#lx, bytes = %u",
+    debug("IO: name = %s, dir = %s, mem = 0x%08lx, bytes = %u",
           vol_priv->name, io->dir == OCF_WRITE ? "W" : "R",
           io->addr, io->bytes);
 

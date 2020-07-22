@@ -17,7 +17,7 @@
 bool monitor_query_data_admit();
 double monitor_query_load_admit();
 
-int monitor_init();
+int monitor_init(ocf_core_t core);
 
 
 #endif

@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <ocf/ocf.h>
 
+#include "../common.h"
 #include "core-vol.h"
 #include "core-obj.h"
 
@@ -21,15 +22,17 @@
 static inline void
 debug(const char *fmt, ...)
 {
-    va_list args;
+    if (CTX_PRINT_DEBUG_MSG) {
+        va_list args;
 
-    printf("[CORE OBJ] ");
+        printf("[CORE OBJ] ");
 
-    va_start(args, fmt);
-    vprintf(fmt, args);
-    va_end(args);
+        va_start(args, fmt);
+        vprintf(fmt, args);
+        va_end(args);
 
-    printf("\n");
+        printf("\n");
+    }
 }
 
 

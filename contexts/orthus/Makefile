@@ -11,7 +11,7 @@ OBJS=$(patsubst %.c, %.o, $(SRC))
 PROGRAM=orthus
 
 CC=gcc
-CFLAGS=-Wall -I${INCDIR} -I${SRCDIR} -I${SRCDIR}/ocf/env/ -g
+CFLAGS=-Wall -I${INCDIR} -I${SRCDIR} -I${SRCDIR}/ocf/env/ -O2
 LDFLAGS=-lm -lz -pthread
 
 all: sync

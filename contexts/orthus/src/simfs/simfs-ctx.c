@@ -18,6 +18,7 @@
 #include <ocf/ocf.h>
 #include "ocf_env.h"
 
+#include "../common.h"
 #include "simfs-ctx.h"
 
 
@@ -27,15 +28,17 @@
 static inline void
 debug(const char *fmt, ...)
 {
-    va_list args;
+    if (CTX_PRINT_DEBUG_MSG) {
+        va_list args;
 
-    printf("[CONTEXT] ");
+        printf("[CONTEXT] ");
 
-    va_start(args, fmt);
-    vprintf(fmt, args);
-    va_end(args);
+        va_start(args, fmt);
+        vprintf(fmt, args);
+        va_end(args);
 
-    printf("\n");
+        printf("\n");
+    }
 }
 
 
@@ -90,6 +93,8 @@ simfs_data_alloc(uint32_t pages)
     data->ptr = malloc(pages * PAGE_SIZE);
     data->offset = 0;
     data->pages = pages;
+
+    memset(data->ptr, 0, pages * PAGE_SIZE);
 
     return data;
 }
@@ -196,6 +201,8 @@ simfs_data_seek(ctx_data_t *simfs_data, ctx_data_seek_t seek,
         seek_size = valid_size_from_offset(data, size);
         data->offset += seek_size;
         break;
+    default:
+        seek_size = 0;
     }
 
     return seek_size;
@@ -257,7 +264,6 @@ simfs_cleaner_stop(ocf_cleaner_t cleaner)
 
 /**
  * Initialize metadata updater thread. 
- * Metadata updater refers to ??? [TODO].
  */
 static int
 simfs_metadata_updater_init(ocf_metadata_updater_t metadata_updater)
@@ -294,6 +300,8 @@ simfs_logger_print(ocf_logger_t logger, ocf_logger_lvl_t lvl,
     FILE *logfile;
 
     if (lvl > log_info)
+        return 0;
+    else if (!OCF_LOGGER_INFO_MSG && lvl == log_info)
         return 0;
 
     logfile = lvl <= log_warn ? stderr : stdout;

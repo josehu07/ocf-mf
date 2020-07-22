@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <ocf/ocf.h>
 
+#include "../common.h"
 #include "queue.h"
 #include "cache-vol.h"
 #include "cache-obj.h"
@@ -22,15 +23,17 @@
 static inline void
 debug(const char *fmt, ...)
 {
-    va_list args;
+    if (CTX_PRINT_DEBUG_MSG) {
+        va_list args;
 
-    printf("[CACHE OBJ] ");
+        printf("[CACHE OBJ] ");
 
-    va_start(args, fmt);
-    vprintf(fmt, args);
-    va_end(args);
+        va_start(args, fmt);
+        vprintf(fmt, args);
+        va_end(args);
 
-    printf("\n");
+        printf("\n");        
+    }
 }
 
 

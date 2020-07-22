@@ -11,9 +11,10 @@
 #include <stdarg.h>
 #include <ocf/ocf.h>
 
+#include "common.h"
 #include "simfs/simfs-ctx.h"
 #include "cache/cache-obj.h"
-#include "workload.h"
+#include "simple.h"
 
 
 /**
@@ -22,15 +23,17 @@
 static inline void
 debug(const char *fmt, ...)
 {
-    va_list args;
+    if (CTX_PRINT_DEBUG_MSG) {
+        va_list args;
 
-    printf("[MAIN] ");
+        printf("[WORKLOAD] ");
 
-    va_start(args, fmt);
-    vprintf(fmt, args);
-    va_end(args);
+        va_start(args, fmt);
+        vprintf(fmt, args);
+        va_end(args);
 
-    printf("\n");
+        printf("\n");
+    }
 }
 
 
@@ -75,7 +78,7 @@ read_cmpl_callback(struct ocf_io *io, int error)
  */
 static int
 submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
-          uint64_t len, int dir, ocf_end_io_t callback_func)
+          uint32_t len, int dir, ocf_end_io_t callback_func)
 {
     ocf_cache_t cache = ocf_core_get_cache(core);
     cache_obj_priv_t *cache_obj_priv = ocf_cache_get_priv(cache);
@@ -110,7 +113,7 @@ submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
  *     6. read out string C
  */
 int
-perform_workload(ocf_core_t core)
+perform_workload_simple(ocf_core_t core)
 {
     simfs_data_t *data1, *data2, *data3, *data4, *data5, *data6;
     int ret;
@@ -128,8 +131,6 @@ perform_workload(ocf_core_t core)
 
     /**
      * We should wait here until this write is complete.
-     * TODO: Now since async queue is implemented as sync, we are not
-     *       doing actual waiting.
      */
     
     /** 2. Read the first string. */
@@ -137,7 +138,7 @@ perform_workload(ocf_core_t core)
     if (data2 == NULL)
         return -ENOMEM;
 
-    submit_io(core, data2, 0, 512, OCF_READ, read_cmpl_callback);
+    ret = submit_io(core, data2, 0, 512, OCF_READ, read_cmpl_callback);
     if (ret)
         return ret;
 
@@ -151,19 +152,13 @@ perform_workload(ocf_core_t core)
     ret = submit_io(core, data3, 0, 512, OCF_WRITE, write_cmpl_callback);
     if (ret)
         return ret;
-
-    /**
-     * We should wait here until this write is complete.
-     * TODO: Now since async queue is implemented as sync, we are not
-     *       doing actual waiting.
-     */
     
     /** 4. Read the second string. */
     data4 = simfs_data_alloc(1);
     if (data4 == NULL)
         return -ENOMEM;
 
-    submit_io(core, data4, 0, 512, OCF_READ, read_cmpl_callback);
+    ret = submit_io(core, data4, 0, 512, OCF_READ, read_cmpl_callback);
     if (ret)
         return ret;
 
@@ -177,19 +172,13 @@ perform_workload(ocf_core_t core)
     ret = submit_io(core, data5, 8192, 512, OCF_WRITE, write_cmpl_callback);
     if (ret)
         return ret;
-
-    /**
-     * We should wait here until this write is complete.
-     * TODO: Now since async queue is implemented as sync, we are not
-     *       doing actual waiting.
-     */
     
     /** 6. Read the third string. */
     data6 = simfs_data_alloc(1);
     if (data6 == NULL)
         return -ENOMEM;
 
-    submit_io(core, data6, 8192, 512, OCF_READ, read_cmpl_callback);
+    ret = submit_io(core, data6, 8192, 512, OCF_READ, read_cmpl_callback);
     if (ret)
         return ret;
 

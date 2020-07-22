@@ -363,6 +363,29 @@ int ocf_core_get_stats(ocf_core_t core, struct ocf_stats_core *stats)
 	return 0;
 }
 
+/**
+ * Get the given core's (partial + full) miss ratio.
+ */
+double ocf_core_get_read_miss_ratio(ocf_core_t core)
+{
+	struct ocf_counters_req *curr;
+	uint64_t misses = 0, total = 0;
+	uint32_t i;
+
+	for (i = 0; i != OCF_IO_CLASS_MAX; ++i) {
+		curr = &core->counters->part_counters[i].read_reqs;
+
+		misses += env_atomic64_read(&curr->partial_miss);
+		misses += env_atomic64_read(&curr->full_miss);
+
+		total += env_atomic64_read(&curr->total);
+	}
+
+	if (total <= 0)
+		return 0.0;
+	return (double) misses / (double) total;
+}
+
 #ifdef OCF_DEBUG_STATS
 
 #define IO_ALIGNMENT_SIZE (IO_ALIGN_NO)

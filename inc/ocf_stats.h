@@ -187,6 +187,11 @@ int ocf_stats_collect_core(ocf_core_t core,
 		struct ocf_stats_errors *errors);
 
 /**
+ * Get given core's read (partial + full) miss ratio.
+ */
+double ocf_core_get_read_miss_ratio(ocf_core_t core);
+
+/**
  * @param Collect statistics for given ioclass
  *
  * @param core Core handle for which statistics will be collected
