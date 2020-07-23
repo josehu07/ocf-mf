@@ -6,6 +6,7 @@
  * cache only if `data_admit` is on (i.e., in workload probing stage).
  */
 
+/*========== [Orthus FLAG BEGIN] ==========*/
 
 #include "ocf/ocf.h"
 #include "../ocf_cache_priv.h"
@@ -22,7 +23,6 @@
 #include "engine_bf.h"
 #include "engine_common.h"
 #include "cache_engine.h"
-#include "../../monitor/monitor.h"
 #include "engine_mf.h"
 
 
@@ -498,3 +498,5 @@ int ocf_write_mf(struct ocf_request *req)
 }
 
 /*========== Multi-factor write implementation END. ==========*/
+
+/*========== [Orthus FLAG END] ==========*/

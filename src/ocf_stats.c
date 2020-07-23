@@ -363,6 +363,9 @@ int ocf_core_get_stats(ocf_core_t core, struct ocf_stats_core *stats)
 	return 0;
 }
 
+
+/*========== [Orthus FLAG BEGIN] ==========*/
+
 /**
  * Get the given core's (partial + full) miss ratio.
  */
@@ -385,6 +388,9 @@ double ocf_core_get_read_miss_ratio(ocf_core_t core)
 		return 0.0;
 	return (double) misses / (double) total;
 }
+
+/*========== [Orthus FLAG END] ==========*/
+
 
 #ifdef OCF_DEBUG_STATS
 

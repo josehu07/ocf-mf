@@ -36,7 +36,11 @@ enum ocf_io_if_type {
 	OCF_IO_WI_IF,
 	OCF_IO_PT_IF,
 	OCF_IO_WO_IF,
+
+	/*========== [Orthus FLAG BEGIN] ==========*/
 	OCF_IO_MF_IF,
+	/*========== [Orthus FLAG END] ==========*/
+
 	OCF_IO_MAX_IF,
 
 	/* Private OCF interfaces */
@@ -78,11 +82,15 @@ static const struct ocf_io_if IO_IFS[OCF_IO_PRIV_MAX_IF] = {
 		.write = ocf_write_wb,
 		.name = "Write Only",
 	},
+
+	/*========== [Orthus FLAG BEGIN] ==========*/
 	[OCF_IO_MF_IF] = {
 		.read = ocf_read_mf,
 		.write = ocf_write_mf,
 		.name = "Multi-Factor",
 	},
+	/*========== [Orthus FLAG END] ==========*/
+
 	[OCF_IO_FAST_IF] = {
 		.read = ocf_read_fast,
 		.write = ocf_write_fast,
@@ -112,7 +120,11 @@ static const struct ocf_io_if *cache_mode_io_if_map[ocf_req_cache_mode_max] = {
 	[ocf_req_cache_mode_wi] = &IO_IFS[OCF_IO_WI_IF],
 	[ocf_req_cache_mode_wo] = &IO_IFS[OCF_IO_WO_IF],
 	[ocf_req_cache_mode_pt] = &IO_IFS[OCF_IO_PT_IF],
+
+	/*========== [Orthus FLAG BEGIN] ==========*/
 	[ocf_req_cache_mode_mf] = &IO_IFS[OCF_IO_MF_IF],
+	/*========== [Orthus FLAG END] ==========*/
+
 	[ocf_req_cache_mode_fast] = &IO_IFS[OCF_IO_FAST_IF],
 	[ocf_req_cache_mode_d2c] = &IO_IFS[OCF_IO_D2C_IF],
 };

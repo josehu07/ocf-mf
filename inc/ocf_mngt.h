@@ -1104,4 +1104,19 @@ int ocf_mngt_core_pool_visit(ocf_ctx_t ctx,
  */
 void ocf_mngt_core_pool_remove(ocf_ctx_t ctx, ocf_volume_t volume);
 
+
+/*========== [Orthus FLAG BEGIN] ==========*/
+
+/**
+ * Setup multi-factor switches and sart the monitor thread.
+ */
+int ocf_mngt_mf_monitor_init(ocf_core_t core);
+
+/**
+ * For the context to gracefully stop the monitor thread.
+ */
+void ocf_mngt_mf_monitor_stop();
+
+/*========== [Orthus FLAG END] ==========*/
+
 #endif /* __OCF_CACHE_H__ */

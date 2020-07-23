@@ -11,9 +11,11 @@
 #include <stdlib.h>
 #include <ocf/ocf.h>
 
-#include "../common.h"
 #include "core-vol.h"
 #include "core-obj.h"
+
+
+extern bool CTX_PRINT_DEBUG_MSG;
 
 
 /**
@@ -25,7 +27,7 @@ debug(const char *fmt, ...)
     if (CTX_PRINT_DEBUG_MSG) {
         va_list args;
 
-        printf("[CORE OBJ] ");
+        printf("[ CORE OBJ] ");
 
         va_start(args, fmt);
         vprintf(fmt, args);

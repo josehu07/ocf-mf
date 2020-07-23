@@ -8,9 +8,11 @@
 #include <stdarg.h>
 #include <ocf/ocf.h>
 
-#include "../common.h"
 #include "simfs/simfs-ctx.h"
 #include "cache-vol.h"
+
+
+extern bool CTX_PRINT_DEBUG_MSG;
 
 
 /**
@@ -75,6 +77,10 @@ cache_vol_close(ocf_volume_t cache_vol)
 /**
  * Handle read or write from or to the storage device.
  * Here we are simulating it with memcpy(). NOT doing size checks.
+ *
+ * We assume cache capacity can be smaller than core capacity, thus,
+ * `vol_priv->addr + io->addr` might point pass the cache capacity.
+ * We simply do `io->addr % capacity` and 
  */
 static void
 cache_vol_submit_io(struct ocf_io *io)
@@ -93,9 +99,8 @@ cache_vol_submit_io(struct ocf_io *io)
         break;
     }
 
-    debug("IO: name = %s, dir = %s, mem = 0x%08lx, bytes = %u",
-          vol_priv->name, io->dir == OCF_WRITE ? "W" : "R",
-          io->addr, io->bytes);
+    debug("IO: dir = %s, cache pos = 0x%08lx, len = %u",
+          io->dir == OCF_WRITE ? "WR <-" : "RD ->", io->addr, io->bytes);
 
     io->end(io, 0);
 }

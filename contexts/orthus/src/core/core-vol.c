@@ -8,9 +8,11 @@
 #include <stdarg.h>
 #include <ocf/ocf.h>
 
-#include "../common.h"
 #include "simfs/simfs-ctx.h"
 #include "core-vol.h"
+
+
+extern bool CTX_PRINT_DEBUG_MSG;
 
 
 /**
@@ -22,7 +24,7 @@ debug(const char *fmt, ...)
     if (CTX_PRINT_DEBUG_MSG) {
         va_list args;
 
-        printf("[CORE VOL] ");
+        printf("[ CORE VOL] ");
 
         va_start(args, fmt);
         vprintf(fmt, args);
@@ -93,9 +95,8 @@ core_vol_submit_io(struct ocf_io *io)
         break;
     }
 
-    debug("IO: name = %s, dir = %s, mem = 0x%08lx, bytes = %u",
-          vol_priv->name, io->dir == OCF_WRITE ? "W" : "R",
-          io->addr, io->bytes);
+    debug("IO: dir = %s,  core pos = 0x%08lx, len = %u",
+          io->dir == OCF_WRITE ? "WR <-" : "RD ->", io->addr, io->bytes);
 
     io->end(io, 0);
 }

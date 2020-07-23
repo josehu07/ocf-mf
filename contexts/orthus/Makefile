@@ -2,6 +2,7 @@
 # Makefile for the `orthus` example use case.
 #
 
+
 OCFDIR=../../
 SRCDIR=src/
 INCDIR=include/
@@ -13,6 +14,7 @@ PROGRAM=orthus
 CC=gcc
 CFLAGS=-Wall -I${INCDIR} -I${SRCDIR} -I${SRCDIR}/ocf/env/ -O2
 LDFLAGS=-lm -lz -pthread
+
 
 all: sync
 	$(MAKE) $(PROGRAM)

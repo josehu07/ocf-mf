@@ -11,10 +11,12 @@
 #include <stdlib.h>
 #include <ocf/ocf.h>
 
-#include "../common.h"
 #include "queue.h"
 #include "cache-vol.h"
 #include "cache-obj.h"
+
+
+extern bool CTX_PRINT_DEBUG_MSG;
 
 
 /**

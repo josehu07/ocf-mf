@@ -18,8 +18,11 @@
 #include <ocf/ocf.h>
 #include "ocf_env.h"
 
-#include "../common.h"
 #include "simfs-ctx.h"
+
+
+extern bool CTX_PRINT_DEBUG_MSG;
+extern bool OCF_LOGGER_INFO_MSG;
 
 
 /**
@@ -31,7 +34,7 @@ debug(const char *fmt, ...)
     if (CTX_PRINT_DEBUG_MSG) {
         va_list args;
 
-        printf("[CONTEXT] ");
+        printf("[ CONTEXT ] ");
 
         va_start(args, fmt);
         vprintf(fmt, args);
