@@ -2,7 +2,50 @@
 
 This is Guanzhou's fork of Intel's Open-CAS Framework (OCF) caching library.
 
-README TO BE POLISHED.
+
+## Overview
+
+Folder structure:
+
+```text
+--- src/
+ |- contexts/
+ |   |- simple/
+ |       |- src/    # An example context for user-level testing
+ |       |- Makefile
+ |- env/
+ |   |- posix/      # POSIX environment specific support
+ |- inc/            # OCF headers exposed to context code
+ |- src/            # OCF library source code
+     |- engine/     # Multi-factor algorithm is implemented as a new mode `mf` into the engine
+```
+
+Trying to implement a new multi-factor cache mode into OCF engine.
+
+
+## Installation & Usage
+
+Clone the repo:
+
+```bash
+$ git clone git@github.com:josehu07/ocf-mf.git
+$ cd ocf-mf
+```
+
+Go into the example context `simple` and compile:
+
+```bash
+$ cd contexts/simple
+$ make
+```
+
+This will link the OCF library to the location and compile with your main file. Run the executable by:
+
+```bash
+$ ./simple
+```
+
+To include OCF as part of a larger project, take it as library, define your own context, and call the OCF APIs. Follow the provided `simple` context as a guidance.
 
 
 ## Original README

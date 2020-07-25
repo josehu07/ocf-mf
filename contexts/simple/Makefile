@@ -9,7 +9,7 @@ INCDIR=include/
 
 SRC=$(shell find ${SRCDIR} -name \*.c)
 OBJS=$(patsubst %.c, %.o, $(SRC))
-PROGRAM=orthus
+PROGRAM=simple
 
 CC=gcc
 CFLAGS=-Wall -I${INCDIR} -I${SRCDIR} -I${SRCDIR}/ocf/env/ -O2
