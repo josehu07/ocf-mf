@@ -25,10 +25,11 @@ Trying to implement a new multi-factor cache mode into OCF engine.
 
 ## Installation & Usage
 
-Clone the repo:
+Clone the repo recursively (there are submodules, including the SSD simulator `flashsim`):
 
 ```bash
-$ git clone git@github.com:josehu07/ocf-mf.git
+$ git clone --recursive git@github.com:josehu07/ocf-mf.git
+$ git submodule update --init --recursive
 $ cd ocf-mf
 ```
 
