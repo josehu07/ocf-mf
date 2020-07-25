@@ -1,4 +1,11 @@
-# Open CAS Framework
+# Open CAS Framework - Guanzhou's Fork
+
+This is Guanzhou's fork of Intel's Open-CAS Framework (OCF) caching library.
+
+README TO BE POLISHED.
+
+
+## Original README
 
 [![Build Status](https://open-cas-logs.s3.us-east-2.amazonaws.com/master-status/build/curr-badge.svg)](https://open-cas-logs.s3.us-east-2.amazonaws.com/master-status/build/build.html)
 [![Tests Status](https://open-cas-logs.s3.us-east-2.amazonaws.com/master-status/tests/curr-badge.svg)](https://open-cas-logs.s3.us-east-2.amazonaws.com/master-status/tests/index.html)
@@ -12,7 +19,7 @@ through user provided environment wrappers layer. OCF tightly integrates with th
 rest of software stack, providing flawless, high performance, low latency caching
 utility.
 
-# In this readme:
+### In this readme:
 
 * [Documentation](#documentation)
 * [Source Code](#source-code)
@@ -24,12 +31,12 @@ utility.
 * [Contributing](#contributing)
 * [Security](#security)
 
-## Documentation
+### Documentation
 
 OCF documentation is available on [GitHub Pages](https://open-cas.github.io/getting_started_ocf.html).
-Doxygen API documentation is available [here](http://open-cas.github.io/doxygen/ocf).  
+Doxygen API documentation is available [here](http://open-cas.github.io/doxygen/ocf).
 
-## Source Code
+### Source Code
 
 Source code is available in the official OCF GitHub repository:
 
@@ -38,7 +45,7 @@ git clone https://github.com/Open-CAS/ocf.git
 cd ocf
 ~~~
 
-## Deployment
+### Deployment
 
 OCF doesn't compile as separate library. It's designed to be included into another
 software stack. For this purpose OCF provides Makefile with two useful targets for
@@ -61,7 +68,7 @@ make -C $OCFDIR src O=$SRCDIR CMD=cp
 make -C $OCFDIR inc O=$INCDIR CMD=cp
 ~~~
 
-## Examples
+### Examples
 
 OCF is shipped with examples, which are complete, compillable and working
 programs, containing lot of comments that explain basics of caching. They
@@ -71,7 +78,7 @@ Examples can be found in directory `example/`.
 
 Each example contains Makefile which can be used to compile it.
 
-## Unit Tests
+### Unit Tests
 
 OCF is shipped with dedicated unit test framework based on Cmocka.  
 To run unit tests you need to install following packages:
@@ -85,7 +92,7 @@ To run unit tests use following command:
 ./tests/unit/framework/run_unit_tests.py
 ~~~
 
-## Build Test
+### Build Test
 
 OCF repository contains basic build test. It uses default POSIX environment.
 To run this test, use following commands:
@@ -95,7 +102,7 @@ cd tests/build/
 make
 ~~~
 
-## Functional Tests
+### Functional Tests
 
 OCF repository contains dedicated functional test framework written in python and executed via pytest. With the use of ctypes it is possible to call, wrap ocf functions and use C compatible data types.  
 To run functional tests you need to install the following:
@@ -108,14 +115,14 @@ To run all functional tests (in compliance with the configuration file) compile 
 pytest
 ~~~
 
-## Contributing
+### Contributing
 
 Feel like making OCF better? Don't hesitate to submit a pull request!  
 You can find more information about our contribution process
 [here](https://open-cas.github.io/contributing.html).  
 In case of any questions feel free to contact [maintainer](mailto:robert.baldyga@intel.com).
 
-## Security
+### Security
 
 To report a potential security vulnerability please follow the instructions
 [here](https://open-cas.github.io/contributing.html#reporting-a-potential-security-vulnerability)
