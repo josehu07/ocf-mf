@@ -154,7 +154,10 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
 
         /** Slope following loop. */
         while (1) {
-            /** If detected workload change (1), quit and re-optimize. */
+            /**
+             * Workload change check:
+             * If detected workload change, quit and re-optimize.
+             */
             double miss_ratio = _get_miss_ratio(core);
             if (miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD) {
                 printf("  (tune) miss ratio too high, quit tuning\n");
@@ -162,7 +165,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
             }
 
             /**
-             * Middle ratio yields best throughput, goto workload check.
+             * Middle ratio yields best throughput, goto intensity check.
              */
             if (tp2 >= tp1 && tp2 >= tp3) {
                 monitor_set_load_admit(la2);
@@ -204,12 +207,16 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
             }
         }
 
-        /** Workload change check (2). */
+        /**
+         * Intensity check:
+         * If client's request intensity cannot fill cache bandwidth, then fall
+         * back to classic caching.
+         */
         if (monitor_query_load_admit() == 1.0) {
             if (second_chance) {    /** Give a second chance. */
                 second_chance = false;
                 continue;
-            } else {    /** Quit and re-optimize. */
+            } else {
                 printf("  (tune) load_admit always 100%%, quit tuning\n");
                 return;
             }

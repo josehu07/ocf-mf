@@ -314,7 +314,6 @@ static int _ocf_read_mf_do(struct ocf_request *req)
 
     /**
      * Update statistics.
-     * TODO: include multi-factor stats?
      */
     ocf_engine_update_request_stats(req);
     ocf_engine_update_block_stats(req);
