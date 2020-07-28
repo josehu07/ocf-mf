@@ -43,7 +43,7 @@ $ make
 This will link the OCF library to the location and compile with your main file. Run the executable by:
 
 ```bash
-$ ./simple
+$ ./sim
 ```
 
 To include OCF as part of a larger project, take it as library, define your own context, and call the OCF APIs. Follow the provided `simple` context as a guidance.
