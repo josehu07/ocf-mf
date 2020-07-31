@@ -27,6 +27,11 @@ const bool CTX_PRINT_DEBUG_MSG = false;
 const bool OCF_LOGGER_INFO_MSG = false;
 
 
+/** Passing actual data to FlashSim or not? */
+const bool FLASHSIM_ENABLE_DATA = true;
+const unsigned long FLASHSIM_PAGE_SIZE = 4096;
+
+
 /**
  * Helper function for error handling.
  */
@@ -210,8 +215,8 @@ main(int argc, char *argv[])
         error("Unable to start monitor thread", ret);
 
     /** 6. Perform workload. */
-    // perform_workload_fuzzy(core, 36000);
-    perform_workload_rand_write(core, 36000);
+    perform_workload_fuzzy(core, 36000);
+    // perform_workload_rand_write(core, 36000);
 
     /** 7. Stop the multi-factor monitor. */
     ocf_mngt_mf_monitor_stop();

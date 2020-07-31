@@ -14,8 +14,8 @@
 
 
 #define CORE_VOL_TYPE (2)
-#define CORE_VOL_SIZE (64*1024*1024)    /** Cache volume size: 64MiB. */
-#define CORE_VOL_MAX_IO_SIZE (128*1024)     /** Max I/O size: 128KiB. */
+#define CORE_VOL_SIZE (80*1024*1024)       /** Cache size: 160MiB. */
+#define CORE_VOL_MAX_IO_SIZE (32*1024)     /** Max I/O size: 32KiB. */
 
 
 /**
@@ -23,8 +23,8 @@
  */
 struct core_vol_priv {
     const char *name;
-    uint8_t *addr;
-    uint64_t capacity;  /** Capacity in bytes. */
+    const char *sock_name;
+    int sock_fd;
 };
 
 typedef struct core_vol_priv core_vol_priv_t;

@@ -14,8 +14,8 @@
 
 
 #define CACHE_VOL_TYPE (1)
-#define CACHE_VOL_SIZE (32*1024*1024)   /** Cache volume size: 32MiB. */
-#define CACHE_VOL_MAX_IO_SIZE (128*1024)    /** Max I/O size: 128KiB. */
+#define CACHE_VOL_SIZE (32*1024*1024)       /** Cache size: 64MiB. */
+#define CACHE_VOL_MAX_IO_SIZE (32*1024)     /** Max I/O size: 32KiB. */
 
 
 /**
@@ -23,8 +23,8 @@
  */
 struct cache_vol_priv {
     const char *name;
-    uint8_t *addr;
-    uint64_t capacity;  /** Capacity in bytes. */
+    const char *sock_name;
+    int sock_fd;
 };
 
 typedef struct cache_vol_priv cache_vol_priv_t;

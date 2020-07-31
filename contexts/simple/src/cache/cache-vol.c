@@ -77,10 +77,6 @@ cache_vol_close(ocf_volume_t cache_vol)
 /**
  * Handle read or write from or to the storage device.
  * Here we are simulating it with memcpy(). NOT doing size checks.
- *
- * We assume cache capacity can be smaller than core capacity, thus,
- * `vol_priv->addr + io->addr` might point pass the cache capacity.
- * We simply do `io->addr % capacity` and 
  */
 static void
 cache_vol_submit_io(struct ocf_io *io)

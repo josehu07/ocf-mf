@@ -1,10 +1,8 @@
 /**
  * Fuzzy test.
  *
- * Performs random reads & writes and checks correctness.
- * 
- * Assumes all volumes and context buffers start with all zeros filled.
- * Assumes callbacks are sequential, in-order, & synchronous.
+ * Performs random reads & writes and checks correctness. Assumes callbacks
+ * are sequential, in-order, & synchronous.
  */
 
 
@@ -24,6 +22,9 @@ extern bool CTX_PRINT_DEBUG_MSG;
 
 /** Absolute buffer holding data we expect. */
 static char *abs_buf;
+
+/** Bitmap of which pages have been written at least once. */
+static uint8_t *bit_map;
 
 /** Counters for read operations. */
 static int total_reads_count = 0;
@@ -228,6 +229,12 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
 
     memset(abs_buf, 0, CORE_VOL_SIZE);
 
+    bit_map = malloc((CORE_VOL_SIZE / PAGE_SIZE) / 8);
+    if (bit_map == NULL)
+        return -ENOMEM;
+
+    memset(bit_map, 0, (CORE_VOL_SIZE / PAGE_SIZE) / 8);
+
     total_reads_count = 0;
     valid_reads_count = 0;
 
@@ -236,8 +243,8 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
     /** Loop and perform random IOs. */
     for (i = 0; i < num_ios; ++i) {
         int j, k, dir;
+        uint64_t page_no, addr;
         uint32_t size = PAGE_SIZE;
-        uint64_t addr = (rand() % (CORE_VOL_SIZE / PAGE_SIZE)) * PAGE_SIZE;
         simfs_data_t *data = simfs_data_alloc(1);
 
         if (data == NULL)
@@ -252,10 +259,13 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
         if (i < 10000)
             dir = OCF_WRITE;
         else
-            dir = rand() % 10 < 2 ? OCF_WRITE : OCF_READ;
+            dir = (rand() % 10) < 2 ? OCF_WRITE : OCF_READ;
 
+        /** Write: Put in ID + random alpha char data in each sector. */
         if (dir == OCF_WRITE) {
-            /** Put in ID + random alpha char data in each sector. */
+            page_no = rand() % (CORE_VOL_SIZE / PAGE_SIZE);
+            addr = page_no * PAGE_SIZE;
+
             for (j = 0; j < size / 512; ++j) {
                 char id[20];
                 char *sec_base = (char *) (data->ptr + data->offset)
@@ -276,7 +286,16 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
             ret = submit_io(core, data, addr, size, dir, write_cmpl_callback);
             if (ret)
                 return ret;
+
+            bit_map[page_no / 8] |= 1 << (page_no % 8);
+
+        /** Read: only choose from written pages. */
         } else {
+            do {
+                page_no = rand() % (CORE_VOL_SIZE / PAGE_SIZE);
+            } while ((bit_map[page_no / 8] & (1 << (page_no % 8))) == 0);
+            addr = page_no * PAGE_SIZE;
+
             ret = submit_io(core, data, addr, size, dir, read_cmpl_callback);
             if (ret)
                 return ret;
@@ -292,6 +311,9 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
     ENV_BUG_ON(!list_empty(&expects.head));
 
     env_mutex_destroy(&expects_mutex);
+
+    free(abs_buf);
+    free(bit_map);
 
     printf("\nResult:\n\n");
 
