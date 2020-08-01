@@ -12,30 +12,8 @@
 #include <ocf/ocf.h>
 
 #include "core-vol.h"
+#include "common.h"
 #include "core-obj.h"
-
-
-extern bool CTX_PRINT_DEBUG_MSG;
-
-
-/**
- * Debug printing.
- */
-static inline void
-debug(const char *fmt, ...)
-{
-    if (CTX_PRINT_DEBUG_MSG) {
-        va_list args;
-
-        printf("[ CORE OBJ] ");
-
-        va_start(args, fmt);
-        vprintf(fmt, args);
-        va_end(args);
-
-        printf("\n");
-    }
-}
 
 
 /**
@@ -77,6 +55,88 @@ remove_core_callback(void *callback_states, int error)
 }
 
 
+/*========== Device log implementation BEGIN ==========*/
+
+/**
+ * Device circular log of length 100 for throughput measurement. It
+ * records the latest 100 IOs through this device which should be
+ * long enough.
+ */
+struct core_log_entry {
+    double cmpl_time_ms;
+    uint32_t bytes;
+};
+
+#define CORE_LOG_LENGTH (500)
+static struct core_log_entry core_log[CORE_LOG_LENGTH];
+
+static int core_log_head = -1;
+static int core_log_tail = -1;
+
+static env_rwlock core_log_lock;
+
+/**
+ * Push a new IO entry into the log, possibly erase an oldest one if
+ * the log is full.
+ */
+void
+core_log_push_entry(double cmpl_time_ms, uint32_t bytes)
+{
+    int pos;
+
+    env_rwlock_write_lock(&core_log_lock);
+
+    pos = (core_log_tail + 1) % CORE_LOG_LENGTH;
+
+    core_log[pos].cmpl_time_ms = cmpl_time_ms;
+    core_log[pos].bytes = bytes;
+
+    core_log_tail = pos;
+    if (core_log_tail == core_log_head)
+        core_log_head = (core_log_head + 1) % CORE_LOG_LENGTH;
+
+    if (core_log_head < 0)
+        core_log_head = 0;
+
+    env_rwlock_write_unlock(&core_log_lock);
+}
+
+/**
+ * Query the log for throughput (KB/s) of given time interval.
+ */
+double
+core_log_query_throughput(double begin_time_ms, double end_time_ms)
+{
+    double throughput = 0.0;
+
+    env_rwlock_read_lock(&core_log_lock);
+
+    if (core_log_head >= 0) {
+        int i = core_log_tail + 1;
+
+        do {
+            i = i == 0 ? CORE_LOG_LENGTH - 1 : i - 1;
+
+            if (core_log[i].cmpl_time_ms <= begin_time_ms)
+                break;
+
+            if (core_log[i].cmpl_time_ms <= end_time_ms
+                && core_log[i].cmpl_time_ms > begin_time_ms)
+                throughput += (double) core_log[i].bytes / 1024.0;
+        } while (i != core_log_head);
+
+        if (i == core_log_head)
+            DEBUG("LOG: log length too small");
+    }
+
+    env_rwlock_read_unlock(&core_log_lock);
+
+    return (throughput * 1000.0) / (end_time_ms - begin_time_ms);
+}
+
+/*========== Device log implementation END ==========*/
+
+
 /**
  * Setup the core object and attach core device as a CORE_VOL_TYPE
  * volume. Then, add this core to previously setted up cache.
@@ -112,7 +172,12 @@ core_obj_setup(ocf_cache_t cache, ocf_core_t *core)
     if (ret)
         return ret;
 
-    debug("SETUP: done");
+    /** Setup device log. */
+    core_log_head = -1;
+    core_log_tail = -1;
+    env_rwlock_init(&core_log_lock);
+
+    DEBUG("SETUP: done");
 
     return 0;
 }
@@ -135,7 +200,9 @@ core_obj_stop(ocf_core_t core)
     if (ret)
         return ret;
 
-    debug("STOP: done");
+    env_rwlock_destroy(&core_log_lock);
+
+    DEBUG("STOP: done");
 
     return 0;
 }

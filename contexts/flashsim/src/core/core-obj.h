@@ -15,6 +15,11 @@
 #include "ocf_env.h"
 
 
+/** Device log for throughput measurement. */
+void core_log_push_entry(double cmpl_time_ms, uint32_t bytes);
+double core_log_query_throughput(double begin_time_ms, double end_time_ms);
+
+
 int core_obj_setup(ocf_cache_t cache, ocf_core_t *core);
 int core_obj_stop(ocf_core_t core);
 

@@ -19,8 +19,8 @@
 #include "cache/cache-obj.h"
 #include "core/core-vol.h"
 #include "core/core-obj.h"
-#include "workload/rand-write.h"
 #include "workload/fuzzy-test.h"
+#include "workload/tp-hacking.h"
 
 
 const bool CTX_PRINT_DEBUG_MSG = false;
@@ -28,18 +28,43 @@ const bool OCF_LOGGER_INFO_MSG = false;
 
 
 /** Passing actual data to FlashSim or not? */
-const bool FLASHSIM_ENABLE_DATA = true;
+const bool FLASHSIM_ENABLE_DATA = false;
 const unsigned long FLASHSIM_PAGE_SIZE = 4096;
 
 
-/**
- * Helper function for error handling.
- */
 static void
 error(const char *msg, int error)
 {
     fprintf(stderr, "ERROR: %s, code = %d\n", msg, error);
     exit(1);
+}
+
+
+/**
+ * Controlling global time in ms.
+ */
+static double cur_time_ms = 0.0;
+
+static env_rwlock cur_time_lock;
+
+double
+get_cur_time_ms()
+{
+    double res;
+
+    env_rwlock_read_lock(&cur_time_lock);
+    res = cur_time_ms;
+    env_rwlock_read_unlock(&cur_time_lock);
+
+    return res;
+}
+
+void
+time_elapse_ms(double delta_ms)
+{
+    env_rwlock_write_lock(&cur_time_lock);
+    cur_time_ms += delta_ms;
+    env_rwlock_write_unlock(&cur_time_lock);
 }
 
 
@@ -182,8 +207,10 @@ main(int argc, char *argv[])
     struct ocf_stats_errors stats_errors;
     int ret;
 
-    /** 0. Set random seed. */
     srand(time(NULL));
+
+    cur_time_ms = 0.0;
+    env_rwlock_init(&cur_time_lock);
 
     /** 1. Initialize OCF context. */
     ret = simfs_ctx_init(&ctx);
@@ -215,8 +242,8 @@ main(int argc, char *argv[])
         error("Unable to start monitor thread", ret);
 
     /** 6. Perform workload. */
-    perform_workload_fuzzy(core, 36000);
-    // perform_workload_rand_write(core, 36000);
+    // perform_workload_fuzzy(core, 36000);
+    perform_workload_tp_hack(core, 10000, 30);
 
     /** 7. Stop the multi-factor monitor. */
     ocf_mngt_mf_monitor_stop();
@@ -243,6 +270,8 @@ main(int argc, char *argv[])
 
     /** 12. Cleanup this context. */
     simfs_ctx_cleanup(ctx);
+
+    env_rwlock_destroy(&cur_time_lock);
 
     return 0;
 }

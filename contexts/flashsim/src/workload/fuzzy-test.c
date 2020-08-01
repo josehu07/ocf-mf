@@ -14,10 +14,8 @@
 #include "simfs/simfs-ctx.h"
 #include "cache/cache-obj.h"
 #include "core/core-vol.h"
+#include "common.h"
 #include "fuzzy-test.h"
-
-
-extern bool CTX_PRINT_DEBUG_MSG;
 
 
 /** Absolute buffer holding data we expect. */
@@ -37,26 +35,6 @@ static int valid_reads_count = 0;
  */
 static struct expected_page expects;
 static env_mutex expects_mutex;
-
-
-/**
- * Debug printing.
- */
-static inline void
-debug(const char *fmt, ...)
-{
-    if (CTX_PRINT_DEBUG_MSG) {
-        va_list args;
-
-        printf("[ WORKLOAD] ");
-
-        va_start(args, fmt);
-        vprintf(fmt, args);
-        va_end(args);
-
-        printf("\n");
-    }
-}
 
 
 /**
@@ -140,7 +118,7 @@ write_cmpl_callback(struct ocf_io *io, int error)
     simfs_data_t *data = ocf_io_get_data(io);
 
     if (error != 0)
-        debug("WR COMPLETE: error = %d", error);
+        DEBUG("WR COMPLETE: error = %d", error);
 
     /** Free data buffer and I/O structure in callback. */
     simfs_data_free(data);
@@ -156,7 +134,7 @@ read_cmpl_callback(struct ocf_io *io, int error)
     if (error == 0)
         validate_read_result(io);
     else 
-        debug("RD COMPLETE: error = %d", error);
+        DEBUG("RD COMPLETE: error = %d", error);
 
     /** Free data buffer and I/O structure in callback. */
     simfs_data_free(data);
@@ -250,7 +228,7 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
         if (data == NULL)
             return -ENOMEM;
 
-        debug("Perform IO #%d", i);
+        DEBUG("Perform IO #%d", i);
 
         /**
          * First 10000 IOs are writes (to somewhat fill the device).

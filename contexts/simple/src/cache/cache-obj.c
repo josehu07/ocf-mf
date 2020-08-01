@@ -13,30 +13,8 @@
 
 #include "queue.h"
 #include "cache-vol.h"
+#include "common.h"
 #include "cache-obj.h"
-
-
-extern bool CTX_PRINT_DEBUG_MSG;
-
-
-/**
- * Debug printing.
- */
-static inline void
-debug(const char *fmt, ...)
-{
-    if (CTX_PRINT_DEBUG_MSG) {
-        va_list args;
-
-        printf("[CACHE OBJ] ");
-
-        va_start(args, fmt);
-        vprintf(fmt, args);
-        va_end(args);
-
-        printf("\n");        
-    }
-}
 
 
 /**
@@ -171,7 +149,7 @@ cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache)
         return ret;
     }
 
-    debug("SETUP: done");
+    DEBUG("SETUP: done");
 
     return 0;
 }
@@ -199,7 +177,7 @@ cache_obj_stop(ocf_cache_t cache)
     ocf_queue_put(cache_obj_priv->mngt_queue);
     free(cache_obj_priv);
 
-    debug("STOP: done");
+    DEBUG("STOP: done");
 
     return 0;
 }

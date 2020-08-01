@@ -14,33 +14,13 @@
 #include <ocf/ocf.h>
 
 #include "simfs/simfs-ctx.h"
+#include "core-obj.h"
+#include "common.h"
 #include "core-vol.h"
 
 
-extern bool CTX_PRINT_DEBUG_MSG;
-
 extern bool FLASHSIM_ENABLE_DATA;
 extern unsigned long FLASHSIM_PAGE_SIZE;
-
-
-/**
- * Debug printing.
- */
-static inline void
-debug(const char *fmt, ...)
-{
-    if (CTX_PRINT_DEBUG_MSG) {
-        va_list args;
-
-        printf("[ CORE VOL] ");
-
-        va_start(args, fmt);
-        vprintf(fmt, args);
-        va_end(args);
-
-        printf("\n");
-    }
-}
 
 
 /*========== Core Volume Operations Implemention BEGIN. ==========*/
@@ -62,7 +42,7 @@ core_vol_open(ocf_volume_t core_vol, void *params)
     vol_priv->sock_name = "core-simssd";
     vol_priv->sock_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
     if (vol_priv->sock_fd < 0) {
-        debug("OPEN: socket() failed");
+        DEBUG("OPEN: socket() failed");
         return 1;
     }
 
@@ -72,11 +52,11 @@ core_vol_open(ocf_volume_t core_vol, void *params)
 
     if (connect(vol_priv->sock_fd, (struct sockaddr *) &saddr,
                 sizeof(saddr))) {
-        debug("OPEN: connect() failed");
+        DEBUG("OPEN: connect() failed");
         return 2;
     }
 
-    debug("OPEN: name = %s, sock = %s", vol_priv->name, vol_priv->sock_name);
+    DEBUG("OPEN: name = %s, sock = %s", vol_priv->name, vol_priv->sock_name);
     return 0;
 }
 
@@ -89,7 +69,7 @@ core_vol_close(ocf_volume_t core_vol)
 {
     core_vol_priv_t *vol_priv = ocf_volume_get_priv(core_vol);
 
-    debug("CLOSE: name = %s", vol_priv->name);
+    DEBUG("CLOSE: name = %s", vol_priv->name);
 
     close(vol_priv->sock_fd);
 }
@@ -131,7 +111,7 @@ _submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
 
     wbytes = write(sock_fd, &header, REQ_HEADER_LENGTH);
     if (wbytes != REQ_HEADER_LENGTH) {
-        debug("IO: write request header send failed");
+        DEBUG("IO: write request header send failed");
         return -1;
     }
 
@@ -139,7 +119,7 @@ _submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     if (FLASHSIM_ENABLE_DATA) {
         wbytes = write(sock_fd, data->ptr + data->offset, header.size);
         if (wbytes != (int) header.size) {
-            debug("IO: write request data send failed");
+            DEBUG("IO: write request data send failed");
             return -2;
         }
     }
@@ -147,7 +127,7 @@ _submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     /** Processing time respond. */
     rbytes = read(sock_fd, time_used_buf, 8);
     if (rbytes != 8) {
-        debug("IO: write processing time recv failed");
+        DEBUG("IO: write processing time recv failed");
         return -3;
     }
 
@@ -172,7 +152,7 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
 
     wbytes = write(sock_fd, &header, REQ_HEADER_LENGTH);
     if (wbytes != REQ_HEADER_LENGTH) {
-        debug("IO: read request header send failed");
+        DEBUG("IO: read request header send failed");
         return -1;
     }
 
@@ -180,7 +160,7 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     if (FLASHSIM_ENABLE_DATA) {
         rbytes = read(sock_fd, data->ptr + data->offset, header.size);
         if (rbytes != (int) header.size) {
-            debug("IO: read request data recv failed");
+            DEBUG("IO: read request data recv failed");
             return -2;
         }
     }
@@ -188,7 +168,7 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     /** Processing time respond. */
     rbytes = read(sock_fd, time_used_buf, 8);
     if (rbytes != 8) {
-        debug("IO: read processing time recv failed");
+        DEBUG("IO: read processing time recv failed");
         return -3;
     }
 
@@ -201,16 +181,16 @@ core_vol_submit_io(struct ocf_io *io)
 {
     simfs_data_t *data = ocf_io_get_data(io);
     core_vol_priv_t *vol_priv = ocf_volume_get_priv(ocf_io_get_volume(io));
-    double start_time = 789.0, time_used = 1.0;   /** TODO. */
+    double start_time = get_cur_time_ms(), time_used = 0.0;
 
     /** Address must be page-aligned. */
     if (io->addr % FLASHSIM_PAGE_SIZE != 0) {
-        debug("IO: unaligned addr 0x%08lx", io->addr);
+        DEBUG("IO: unaligned addr 0x%08lx", io->addr);
         io->end(io, 1);
         return;
     }
 
-    debug("IO: dir = %s, cache pos = 0x%08lx, len = %u",
+    DEBUG("IO: dir = %s, cache pos = 0x%08lx, len = %u",
           io->dir == OCF_WRITE ? "WR <-" : "RD ->", io->addr, io->bytes);
 
     switch (io->dir) {
@@ -224,8 +204,10 @@ core_vol_submit_io(struct ocf_io *io)
 
     if (time_used <= 0.0)
         io->end(io, 2);
-    else
+    else {  /** This IO succeeds. */
+        core_log_push_entry(start_time + time_used, io->bytes);
         io->end(io, 0);
+    }
 }
 
 /**
@@ -344,7 +326,7 @@ core_vol_register(ocf_ctx_t ctx)
     int ret = ocf_ctx_register_volume_type(ctx, CORE_VOL_TYPE,
                                            &core_vol_properties);
 
-    debug("REGISTER: as type = %d", CORE_VOL_TYPE);
+    DEBUG("REGISTER: as type = %d", CORE_VOL_TYPE);
 
     return ret;
 }
@@ -358,5 +340,5 @@ core_vol_unregister(ocf_ctx_t ctx)
 {
     ocf_ctx_unregister_volume_type(ctx, CORE_VOL_TYPE);
 
-    debug("UNREGISTER: done");
+    DEBUG("UNREGISTER: done");
 }

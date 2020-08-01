@@ -24,13 +24,10 @@
 #include "workload/fuzzy-test.h"
 
 
-const bool CTX_PRINT_DEBUG_MSG = false;
+const bool CTX_PRINT_DEBUG_MSG = true;
 const bool OCF_LOGGER_INFO_MSG = false;
 
 
-/**
- * Helper function for error handling.
- */
 static void
 error(const char *msg, int error)
 {

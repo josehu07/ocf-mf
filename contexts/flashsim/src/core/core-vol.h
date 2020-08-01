@@ -14,7 +14,7 @@
 
 
 #define CORE_VOL_TYPE (2)
-#define CORE_VOL_SIZE (80*1024*1024)       /** Cache size: 160MiB. */
+#define CORE_VOL_SIZE (40*1024*1024)    /** Core size: 40MiB, 1/4 actual. */
 #define CORE_VOL_MAX_IO_SIZE (32*1024)     /** Max I/O size: 32KiB. */
 
 

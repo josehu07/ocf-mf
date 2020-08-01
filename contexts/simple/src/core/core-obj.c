@@ -12,30 +12,8 @@
 #include <ocf/ocf.h>
 
 #include "core-vol.h"
+#include "common.h"
 #include "core-obj.h"
-
-
-extern bool CTX_PRINT_DEBUG_MSG;
-
-
-/**
- * Debug printing.
- */
-static inline void
-debug(const char *fmt, ...)
-{
-    if (CTX_PRINT_DEBUG_MSG) {
-        va_list args;
-
-        printf("[ CORE OBJ] ");
-
-        va_start(args, fmt);
-        vprintf(fmt, args);
-        va_end(args);
-
-        printf("\n");
-    }
-}
 
 
 /**
@@ -112,7 +90,7 @@ core_obj_setup(ocf_cache_t cache, ocf_core_t *core)
     if (ret)
         return ret;
 
-    debug("SETUP: done");
+    DEBUG("SETUP: done");
 
     return 0;
 }
@@ -135,7 +113,7 @@ core_obj_stop(ocf_core_t core)
     if (ret)
         return ret;
 
-    debug("STOP: done");
+    DEBUG("STOP: done");
 
     return 0;
 }

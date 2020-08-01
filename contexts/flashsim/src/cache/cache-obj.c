@@ -13,30 +13,8 @@
 
 #include "queue.h"
 #include "cache-vol.h"
+#include "common.h"
 #include "cache-obj.h"
-
-
-extern bool CTX_PRINT_DEBUG_MSG;
-
-
-/**
- * Debug printing.
- */
-static inline void
-debug(const char *fmt, ...)
-{
-    if (CTX_PRINT_DEBUG_MSG) {
-        va_list args;
-
-        printf("[CACHE OBJ] ");
-
-        va_start(args, fmt);
-        vprintf(fmt, args);
-        va_end(args);
-
-        printf("\n");        
-    }
-}
 
 
 /**
@@ -77,6 +55,88 @@ cache_stop_callback(ocf_cache_t cache, void *callback_states,
 }
 
 
+/*========== Device log implementation BEGIN ==========*/
+
+/**
+ * Device circular log of length 100 for throughput measurement. It
+ * records the latest 100 IOs through this device which should be
+ * long enough.
+ */
+struct cache_log_entry {
+    double cmpl_time_ms;
+    uint32_t bytes;
+};
+
+#define CACHE_LOG_LENGTH (500)
+static struct cache_log_entry cache_log[CACHE_LOG_LENGTH];
+
+static int cache_log_head = -1;
+static int cache_log_tail = -1;
+
+static env_rwlock cache_log_lock;
+
+/**
+ * Push a new IO entry into the log, possibly erase an oldest one if
+ * the log is full.
+ */
+void
+cache_log_push_entry(double cmpl_time_ms, uint32_t bytes)
+{
+    int pos;
+
+    env_rwlock_write_lock(&cache_log_lock);
+
+    pos = (cache_log_tail + 1) % CACHE_LOG_LENGTH;
+
+    cache_log[pos].cmpl_time_ms = cmpl_time_ms;
+    cache_log[pos].bytes = bytes;
+
+    cache_log_tail = pos;
+    if (cache_log_tail == cache_log_head)
+        cache_log_head = (cache_log_head + 1) % CACHE_LOG_LENGTH;
+
+    if (cache_log_head < 0)
+        cache_log_head = 0;
+
+    env_rwlock_write_unlock(&cache_log_lock);
+}
+
+/**
+ * Query the log for throughput (KB/s) of given time interval.
+ */
+double
+cache_log_query_throughput(double begin_time_ms, double end_time_ms)
+{
+    double throughput = 0.0;
+
+    env_rwlock_read_lock(&cache_log_lock);
+
+    if (cache_log_head >= 0) {
+        int i = cache_log_tail + 1;
+
+        do {
+            i = i == 0 ? CACHE_LOG_LENGTH - 1 : i - 1;
+
+            if (cache_log[i].cmpl_time_ms <= begin_time_ms)
+                break;
+
+            if (cache_log[i].cmpl_time_ms <= end_time_ms
+                && cache_log[i].cmpl_time_ms > begin_time_ms)
+                throughput += (double) cache_log[i].bytes / 1024.0;
+        } while (i != cache_log_head);
+
+        if (i == cache_log_head)
+            DEBUG("LOG: log length too small");
+    }
+
+    env_rwlock_read_unlock(&cache_log_lock);
+
+    return (throughput * 1000.0) / (end_time_ms - begin_time_ms);
+}
+
+/*========== Device log implementation END ==========*/
+
+
 /**
  * Setup the cache object and attach cache device as a CACHE_VOL_TYPE
  * volume. Using the default cache config here.
@@ -114,6 +174,7 @@ cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache)
      */
     ocf_mngt_cache_device_config_set_default(&device_cfg);
     device_cfg.volume_type = CACHE_VOL_TYPE;
+    device_cfg.perform_test = false;
     ret = ocf_uuid_set_str(&device_cfg.uuid, "cache");
     if (ret)
         return ret;
@@ -171,7 +232,12 @@ cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache)
         return ret;
     }
 
-    debug("SETUP: done");
+    /** Setup device log. */
+    cache_log_head = -1;
+    cache_log_tail = -1;
+    env_rwlock_init(&cache_log_lock);
+
+    DEBUG("SETUP: done");
 
     return 0;
 }
@@ -199,7 +265,9 @@ cache_obj_stop(ocf_cache_t cache)
     ocf_queue_put(cache_obj_priv->mngt_queue);
     free(cache_obj_priv);
 
-    debug("STOP: done");
+    env_rwlock_destroy(&cache_log_lock);
+
+    DEBUG("STOP: done");
 
     return 0;
 }

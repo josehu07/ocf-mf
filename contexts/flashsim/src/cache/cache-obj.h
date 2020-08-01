@@ -26,6 +26,11 @@ struct cache_obj_priv {
 typedef struct cache_obj_priv cache_obj_priv_t;
 
 
+/** Device log for throughput measurement. */
+void cache_log_push_entry(double cmpl_time_ms, uint32_t bytes);
+double cache_log_query_throughput(double begin_time_ms, double end_time_ms);
+
+
 int cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache);
 int cache_obj_stop(ocf_cache_t cache);
 

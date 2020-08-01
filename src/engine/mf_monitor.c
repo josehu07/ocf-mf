@@ -7,6 +7,9 @@
 
 /*========== [Orthus FLAG BEGIN] ==========*/
 
+#include "common.h"
+#include "cache/cache-obj.h"
+#include "core/core-obj.h"
 #include "ocf/ocf.h"
 #include "engine_mf.h"
 
@@ -47,6 +50,33 @@ monitor_set_load_admit(double load_admit)
     env_rwlock_write_unlock(&load_admit_lock);
 }
 
+/**
+ * For OCF mf policy to query the switch values.
+ */
+bool
+monitor_query_data_admit()
+{
+    bool data_admit;
+
+    env_rwlock_read_lock(&data_admit_lock);
+    data_admit = global_data_admit;
+    env_rwlock_read_unlock(&data_admit_lock);
+
+    return data_admit;
+}
+
+double
+monitor_query_load_admit()
+{
+    double load_admit;
+
+    env_rwlock_read_lock(&load_admit_lock);
+    load_admit = global_load_admit;
+    env_rwlock_read_unlock(&load_admit_lock);
+
+    return load_admit;
+}
+
 
 /*========== Multi-factor algorithm logic BEGIN ==========*/
 
@@ -71,18 +101,27 @@ static const int MEASURE_THROUGHPUT_INTERVAL_US = 5000;
 static inline double
 _get_miss_ratio(ocf_core_t core)
 {
-    if (env_atomic_read(&should_stop) != 0)
+    if (env_atomic_read(&should_stop) != 0) {
+        env_rwlock_destroy(&data_admit_lock);
+        env_rwlock_destroy(&load_admit_lock);
         pthread_exit(NULL);
+    }
+
     return ocf_core_get_read_miss_ratio(core);
 }
 
 /**
- * Query the block stat file for throughput.
+ * Query the device object for throughput stats.
  */
 static inline double
 _get_throughput()
 {
-    return rand();   /** Doing user-level correctness testing so meh. */
+    double cur_time_ms = get_cur_time_ms();
+    double begin_time_ms = cur_time_ms
+                           - (MEASURE_THROUGHPUT_INTERVAL_US / 1000.0);
+
+    return cache_log_query_throughput(begin_time_ms, cur_time_ms)
+           + core_log_query_throughput(begin_time_ms, cur_time_ms);
 }
 
 /**
@@ -254,34 +293,6 @@ monitor_func(void *core_ptr)
 }
 
 /*========== Multi-factor algorithm logic END ==========*/
-
-
-/**
- * For OCF mf policy to query the switch values.
- */
-bool
-monitor_query_data_admit()
-{
-    bool data_admit;
-
-    env_rwlock_read_lock(&data_admit_lock);
-    data_admit = global_data_admit;
-    env_rwlock_read_unlock(&data_admit_lock);
-
-    return data_admit;
-}
-
-double
-monitor_query_load_admit()
-{
-    double load_admit;
-
-    env_rwlock_read_lock(&load_admit_lock);
-    load_admit = global_load_admit;
-    env_rwlock_read_unlock(&load_admit_lock);
-
-    return load_admit;
-}
 
 
 /**

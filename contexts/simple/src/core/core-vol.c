@@ -9,30 +9,8 @@
 #include <ocf/ocf.h>
 
 #include "simfs/simfs-ctx.h"
+#include "common.h"
 #include "core-vol.h"
-
-
-extern bool CTX_PRINT_DEBUG_MSG;
-
-
-/**
- * Debug printing.
- */
-static inline void
-debug(const char *fmt, ...)
-{
-    if (CTX_PRINT_DEBUG_MSG) {
-        va_list args;
-
-        printf("[ CORE VOL] ");
-
-        va_start(args, fmt);
-        vprintf(fmt, args);
-        va_end(args);
-
-        printf("\n");
-    }
-}
 
 
 /*========== Core Volume Operations Implemention BEGIN. ==========*/
@@ -54,7 +32,7 @@ core_vol_open(ocf_volume_t core_vol, void *params)
 
     memset(vol_priv->addr, 0, CORE_VOL_SIZE);
 
-    debug("OPEN: name = %s, mem = 0x%08lx, capacity = %lu",
+    DEBUG("OPEN: name = %s, mem = 0x%p, capacity = %lu",
           vol_priv->name, vol_priv->addr, vol_priv->capacity);
 
     return 0;
@@ -69,7 +47,7 @@ core_vol_close(ocf_volume_t core_vol)
 {
     core_vol_priv_t *vol_priv = ocf_volume_get_priv(core_vol);
 
-    debug("CLOSE: name = %s", vol_priv->name);
+    DEBUG("CLOSE: name = %s", vol_priv->name);
 
     free(vol_priv->addr);
 }
@@ -95,7 +73,7 @@ core_vol_submit_io(struct ocf_io *io)
         break;
     }
 
-    debug("IO: dir = %s,  core pos = 0x%08lx, len = %u",
+    DEBUG("IO: dir = %s,  core pos = 0x%08lx, len = %u",
           io->dir == OCF_WRITE ? "WR <-" : "RD ->", io->addr, io->bytes);
 
     io->end(io, 0);
@@ -218,7 +196,7 @@ core_vol_register(ocf_ctx_t ctx)
     int ret = ocf_ctx_register_volume_type(ctx, CORE_VOL_TYPE,
                                            &core_vol_properties);
 
-    debug("REGISTER: as type = %d", CORE_VOL_TYPE);
+    DEBUG("REGISTER: as type = %d", CORE_VOL_TYPE);
 
     return ret;
 }
@@ -232,5 +210,5 @@ core_vol_unregister(ocf_ctx_t ctx)
 {
     ocf_ctx_unregister_volume_type(ctx, CORE_VOL_TYPE);
 
-    debug("UNREGISTER: done");
+    DEBUG("UNREGISTER: done");
 }

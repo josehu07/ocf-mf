@@ -18,31 +18,8 @@
 #include <ocf/ocf.h>
 #include "ocf_env.h"
 
+#include "common.h"
 #include "simfs-ctx.h"
-
-
-extern bool CTX_PRINT_DEBUG_MSG;
-extern bool OCF_LOGGER_INFO_MSG;
-
-
-/**
- * Debug printing.
- */
-static inline void
-debug(const char *fmt, ...)
-{
-    if (CTX_PRINT_DEBUG_MSG) {
-        va_list args;
-
-        printf("[ CONTEXT ] ");
-
-        va_start(args, fmt);
-        vprintf(fmt, args);
-        va_end(args);
-
-        printf("\n");
-    }
-}
 
 
 /**
@@ -395,7 +372,7 @@ simfs_ctx_init(ocf_ctx_t *ctx)
     if (ret)
         return ret;
 
-    debug("INIT: done");
+    DEBUG("INIT: done");
 
     return 0;
 }
@@ -408,5 +385,5 @@ simfs_ctx_cleanup(ocf_ctx_t ctx)
 {
     ocf_ctx_put(ctx);
 
-    debug("CLEANUP: done");
+    DEBUG("CLEANUP: done");
 }

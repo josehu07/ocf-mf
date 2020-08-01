@@ -14,7 +14,7 @@
 
 
 #define CACHE_VOL_TYPE (1)
-#define CACHE_VOL_SIZE (32*1024*1024)       /** Cache size: 64MiB. */
+#define CACHE_VOL_SIZE (24*1024*1024)   /** Cache size: 24MiB, 1/4 actual. */
 #define CACHE_VOL_MAX_IO_SIZE (32*1024)     /** Max I/O size: 32KiB. */
 
 
