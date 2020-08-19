@@ -68,7 +68,7 @@ $ ./bench cache-sock core-sock Intensity    # E.g., ./bench cache-sock core-sock
 - [ ] Model in-device parallelism. For each volume, there is a submission queue (See `cache/cache-vol.c` and `core/core-vol.c`). Currently, it processes requests one at a time. However, it should process requests at a parallelism degree of the SSD's number of packages (channels).
 - [ ] Better ways of measuring throughput? Currently, each backend keeps a log of finished requests (See `cache/cache-obj.c` and `core/core-obj.c`).
 - [ ] More sophisticated benchmarking logic in `workload/...`.
-- [ ] Porting the `mf` cache mode to Open CAS Linux: Need to ensure that it is implemented in a kernel-safe way. (Currently it is not 100% safe - for example, it uses directly uses `pthread_create()` and `malloc()`.)
+- [ ] Porting the `mf` cache mode to Open CAS Linux: Need to ensure that it is implemented in a kernel-safe way. (Currently it is not 100% safe - for example, it directly uses `pthread_create()` and `malloc()`.)
 
 
 ## Original README
