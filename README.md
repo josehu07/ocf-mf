@@ -18,6 +18,7 @@ Folder structure:
  |   |   |   |- core/       # Core volume FlashSim driver
  |   |   |   |- simfs/      # Dummy application context
  |   |   |   |- workload/   # Benchmarking logics should go here
+ |   |   |   main.c
  |   |   |- Makefile
 
 # These are the OCF library - I added cache mode `mf` into the engine
