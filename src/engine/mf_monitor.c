@@ -7,6 +7,7 @@
 
 /*========== [Orthus FLAG BEGIN] ==========*/
 
+#include <stdbool.h>
 #include "common.h"
 #include "cache/cache-obj.h"
 #include "core/core-obj.h"
@@ -81,19 +82,19 @@ monitor_query_load_admit()
 /*========== Multi-factor algorithm logic BEGIN ==========*/
 
 /** Consider cache is stable if miss ratio within OLD_RATIO +- X. */
-static const double WAIT_STABLE_THRESHOLD = 0.0025;
+static const double WAIT_STABLE_THRESHOLD = 0.0015;
 
 /** Sleep X microseconds when detecting cache stability. */
-static const int WAIT_STABLE_SLEEP_INTERVAL_US = 100000;
-
-/** `load_admit` tuning step size. */
-static const double LOAD_ADMIT_TUNING_STEP = 0.02;
+static const int WAIT_STABLE_SLEEP_INTERVAL_US = 1000000;
 
 /** Consider workload change when miss ratio > BASE_RATIO + X. */
 static const double WORKLOAD_CHANGE_THRESHOLD = 0.2;
 
+/** `load_admit` tuning step size. */
+static const double LOAD_ADMIT_TUNING_STEP = 0.01;
+
 /** Measure throughput for a `load_admit` value for X microseconds. */
-static const int MEASURE_THROUGHPUT_INTERVAL_US = 5000;
+static const int MEASURE_THROUGHPUT_INTERVAL_US = 250000;
 
 /**
  * Query the stat component for read (partial + full) miss ratio info.
@@ -111,7 +112,7 @@ _get_miss_ratio(ocf_core_t core)
 }
 
 /**
- * Query the device object for throughput stats.
+ * Query the context device object for throughput stats.
  */
 static inline double
 _get_throughput()
@@ -140,8 +141,8 @@ monitor_wait_stable(ocf_core_t core)
         last_miss_ratio = miss_ratio;
         miss_ratio = _get_miss_ratio(core);
 
-        printf("  (wait) miss ratio = %.5lf -> %.5lf\n",
-               last_miss_ratio, miss_ratio);
+        fprintf(fmonitor, "  (wait) miss ratio = %.5lf -> %.5lf\n",
+                last_miss_ratio, miss_ratio);
     }
 
     return miss_ratio;
@@ -155,7 +156,7 @@ monitor_measure_throughput(double load_admit)
 {
     monitor_set_load_admit(load_admit);
     usleep(MEASURE_THROUGHPUT_INTERVAL_US);
-    return _get_throughput();   
+    return _get_throughput();
 }
 
 /**
@@ -176,18 +177,18 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
         /** Get middle ratio (current `load_admit`) throughput. */
         la2 = monitor_query_load_admit();
         if (iteration % 10 == 0) {
-            printf("  (tune) iter #%lld: load_admit = %.3lf\n",
-                   iteration, la2);
+            fprintf(fmonitor, "  (tune) iter #%lld: load_admit = %.3lf\n",
+                    iteration, la2);
         }
         tp2 = monitor_measure_throughput(la2);
-
-        /** Get lower ratio throughput. */
-        la1 = la2 - LOAD_ADMIT_TUNING_STEP;
-        tp1 = la1 < 0.0 ? -0.1 : monitor_measure_throughput(la1);
 
         /** Get higher ratio throughput. */
         la3 = la2 + LOAD_ADMIT_TUNING_STEP;
         tp3 = la3 > 1.0 ? -0.1 : monitor_measure_throughput(la3);
+
+        /** Get lower ratio throughput. */
+        la1 = la2 - LOAD_ADMIT_TUNING_STEP;
+        tp1 = la1 < 0.0 ? -0.1 : monitor_measure_throughput(la1);
 
         monitor_set_load_admit(la2);    /** Recover. */
 
@@ -199,7 +200,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
              */
             double miss_ratio = _get_miss_ratio(core);
             if (miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD) {
-                printf("  (tune) miss ratio too high, quit tuning\n");
+                fprintf(fmonitor, "  (tune) miss ratio too high, quit\n");
                 return;
             }
 
@@ -209,23 +210,6 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
             if (tp2 >= tp1 && tp2 >= tp3) {
                 monitor_set_load_admit(la2);
                 break;
-            }
-
-            /**
-             * Lower ratio yields best throughput, then shift to lower
-             * `load_admit` value.
-             */
-            if (tp1 >= tp2 && tp1 >= tp3) {
-                if (la1 <= 0.0) {
-                    monitor_set_load_admit(0.0);
-                    break;
-                } else {
-                    la3 = la2; tp3 = tp2;
-                    la2 = la1; tp2 = tp1;
-                    la1 = la1 - LOAD_ADMIT_TUNING_STEP;
-                    tp1 = la1 < 0.0 ? -0.1 : monitor_measure_throughput(la1);
-                    continue;
-                }
             }
 
             /**
@@ -244,6 +228,23 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
                     continue;
                 }
             }
+
+            /**
+             * Lower ratio yields best throughput, then shift to lower
+             * `load_admit` value.
+             */
+            if (tp1 >= tp2 && tp1 >= tp3) {
+                if (la1 <= 0.0) {
+                    monitor_set_load_admit(0.0);
+                    break;
+                } else {
+                    la3 = la2; tp3 = tp2;
+                    la2 = la1; tp2 = tp1;
+                    la1 = la1 - LOAD_ADMIT_TUNING_STEP;
+                    tp1 = la1 < 0.0 ? -0.1 : monitor_measure_throughput(la1);
+                    continue;
+                }
+            }
         }
 
         /**
@@ -256,7 +257,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
                 second_chance = false;
                 continue;
             } else {
-                printf("  (tune) load_admit always 100%%, quit tuning\n");
+                fprintf(fmonitor, "  (tune) load_admit stays 100%%, quit\n");
                 return;
             }
         }
@@ -266,7 +267,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
 /**
  * Monitor thread logic.
  */
-void *
+static void *
 monitor_func(void *core_ptr)
 {
     ocf_core_t core = core_ptr;
@@ -275,17 +276,17 @@ monitor_func(void *core_ptr)
         double base_miss_ratio;
 
         /** Start a new workload with classic caching. */
-        printf("  (fall) start classic caching\n");
+        fprintf(fmonitor, "  (fall) start classic caching\n");
         monitor_set_data_admit(true);
         monitor_set_load_admit(1.0);
 
         /** Wait until cache is stable. */
         base_miss_ratio = monitor_wait_stable(core);
-        printf("  (wait) cache is stable\n");
+        fprintf(fmonitor, "  (wait) cache is stable\n");
 
         /** Turn off `data_admit` and start `load_admit` tuning. */
         monitor_set_data_admit(false);
-        printf("  (tune) turn off data_admit & start tuning\n");
+        fprintf(fmonitor, "  (tune) turn off data_admit & start tuning\n");
         monitor_tune_load_admit(base_miss_ratio, core);
     }
 

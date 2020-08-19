@@ -16,13 +16,12 @@
 #define ENGINE_MF_H_
 
 
+#include <stdbool.h>
 #include "../ocf_request.h"
 
 
 bool monitor_query_data_admit();
 double monitor_query_load_admit();
-
-void *monitor_func(void *core_ptr);
 
 
 int ocf_read_mf(struct ocf_request *req);

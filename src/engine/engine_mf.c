@@ -8,6 +8,7 @@
 
 /*========== [Orthus FLAG BEGIN] ==========*/
 
+#include <stdbool.h>
 #include "ocf/ocf.h"
 #include "../ocf_cache_priv.h"
 #include "../ocf_request.h"
@@ -43,39 +44,7 @@ static inline bool load_admit_allow()
 {
     double load_admit = monitor_query_load_admit();
 
-    double prob = ((double) rand()) / ((double) RAND_MAX);
-    ENV_BUG_ON(prob < 0.0 || prob > 1.0);
-
-    return prob <= load_admit; 
-}
-
-
-/**
- * Helper functions related to extra info fields. The request struct
- * needs to remember these two fields in case the monitor makes a
- * change between the time of lock acquirement and the time the request
- * gets actually processed.
- */
-static inline bool _get_data_admit_allowed(struct ocf_request *req)
-{
-    return req->data_admit_allowed == 1;
-}
-
-static inline bool _get_load_admit_allowed(struct ocf_request *req)
-{
-    return req->load_admit_allowed == 1;
-}
-
-static inline void _set_data_admit_allowed(struct ocf_request *req,
-                                           bool allowed)
-{
-    req->data_admit_allowed = allowed ? 1 : 0;
-}
-
-static inline void _set_load_admit_allowed(struct ocf_request *req,
-                                           bool allowed)
-{
-    req->load_admit_allowed = allowed ? 1 : 0;
+    return (((double) rand()) / RAND_MAX) <= load_admit; 
 }
 
 
@@ -266,7 +235,7 @@ static int _ocf_read_mf_do(struct ocf_request *req)
     if (ocf_engine_is_hit(req)) {
 
         /** Hit && p <= load_admit. */
-        if (_get_load_admit_allowed(req)) {
+        if (req->load_admit_allowed) {
             OCF_DEBUG_RQ(req, "Submit");
             _ocf_read_mf_submit_to_cache(req);
 
@@ -282,7 +251,7 @@ static int _ocf_read_mf_do(struct ocf_request *req)
          * Miss && data_admit is on.
          * Only in this condition, we allow promotion to cache.
          */
-        if (_get_data_admit_allowed(req)) {
+        if (req->data_admit_allowed) {
             if (req->map->rd_locked) {  /** Not properly write-locked. */
                 OCF_DEBUG_RQ(req, "Switching to PT");
                 ocf_read_pt_do(req);
@@ -328,12 +297,12 @@ static int _ocf_read_mf_do(struct ocf_request *req)
 static enum ocf_engine_lock_type ocf_read_mf_get_lock_type(struct ocf_request *req)
 {
     if (ocf_engine_is_hit(req)) {
-        if (_get_load_admit_allowed(req))
+        if (req->load_admit_allowed)
             return ocf_engine_lock_read;
         else
             return ocf_engine_lock_none;
     } else {
-        if (_get_data_admit_allowed(req))
+        if (req->data_admit_allowed)
             return ocf_engine_lock_write;
         else
             return ocf_engine_lock_none;
@@ -382,8 +351,8 @@ int ocf_read_mf(struct ocf_request *req)
      * Query the current multi-factor config and assign `load_admit` &
      * `data_admit` behavior to this request.
      */
-    _set_data_admit_allowed(req, data_admit_allow());
-    _set_load_admit_allowed(req, load_admit_allow());
+    req->data_admit_allowed = data_admit_allow();
+    req->load_admit_allowed = load_admit_allow();
 
     /** Set resume call backs. */
     req->io_if = &_io_if_read_mf_resume;

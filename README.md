@@ -1,6 +1,6 @@
 # Open CAS Framework - Guanzhou's Fork
 
-This is Guanzhou's fork of Intel's Open-CAS Framework (OCF) caching library.
+This is Guanzhou's fork of Intel's Open-CAS Framework (OCF).
 
 
 ## Overview
@@ -9,23 +9,32 @@ Folder structure:
 
 ```text
 --- src/
+
+# This is the user-level context
  |- contexts/
- |   |- simple/
- |       |- src/    # An example context for user-level testing
- |       |- Makefile
+ |   |- ul-exp/     # Context code wrapping OCF, for user-level benchmarking    
+ |   |   |- src/
+ |   |   |   |- cache/      # Cache volume FlashSim driver
+ |   |   |   |- core/       # Core volume FlashSim driver
+ |   |   |   |- simfs/      # Dummy application context
+ |   |   |   |- workload/   # Benchmarking logics should go here
+ |   |   |- Makefile
+
+# These are the OCF library - I added cache mode `mf` into the engine
  |- env/
  |   |- posix/      # POSIX environment specific support
  |- inc/            # OCF headers exposed to context code
  |- src/            # OCF library source code
-     |- engine/     # Multi-factor algorithm is implemented as a new mode `mf` into the engine
+ |   |- engine/             # Multi-factor caching is implemented as a new cache mode `mf`
+ |   |                      # Everything I have added are marked by `[Orthus FLAG BEGIN]`
+ |   |                      # and `[Orthus FLAG END]`.
+ |   |- ...
 ```
 
-Trying to implement a new multi-factor cache mode into OCF engine.
 
+## Usage
 
-## Installation & Usage
-
-Clone the repo recursively (there are submodules, including the SSD simulator `flashsim`):
+Clone the repo recursively (there is a submodule - the Flash SSD simulator `flashsim`):
 
 ```bash
 $ git clone --recursive git@github.com:josehu07/ocf-mf.git
@@ -33,20 +42,32 @@ $ git submodule update --init --recursive
 $ cd ocf-mf
 ```
 
-Go into the example context `simple` and compile:
+Go into the example context `ul-exp` and compile:
 
 ```bash
-$ cd contexts/simple
+$ cd contexts/ul-exp
 $ make
 ```
 
-This will link the OCF library to the location and compile with your main file. Run the executable by:
+This will link the OCF library to this location and compile it together with your main file into a single executable `./bench`. Run it by:
 
 ```bash
-$ ./sim
+# In shell 1
+$ ./run-flashsim.sh cache-sock cache-ssd.conf
+
+# In shell 2
+$ ./run-flashsim.sh core-sock core-ssd.conf
+
+# In shell 3
+$ ./bench cache-sock core-sock Intensity    # E.g., ./bench cache-sock core-sock 3600
 ```
 
-To include OCF as part of a larger project, take it as library, define your own context, and call the OCF APIs. Follow the provided `simple` context as a guidance.
+## TODO List
+
+- [ ] Model in-device parallelism. For each volume, there is a submission queue (See `cache/cache-vol.c` and `core/core-vol.c`). Currently, it processes requests one at a time. However, it should process requests at a parallelism degree of the SSD's number of packages (channels).
+- [ ] Better ways of measuring throughput? Currently, each backend keeps a log of finished requests (See `cache/cache-obj.c` and `core/core-obj.c`).
+- [ ] More sophisticated benchmarking logic in `workload/...`.
+- [ ] Porting the `mf` cache mode to Open CAS Linux: Need to ensure that it is implemented in a kernel-safe way. (Currently it is not 100% safe - for example, it uses directly uses `pthread_create()` and `malloc()`.)
 
 
 ## Original README

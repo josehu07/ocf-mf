@@ -188,11 +188,19 @@ struct ocf_request {
 	uint8_t seq_cutoff : 1;
 	/*!< Sequential cut off set for this request */
 
-	uint8_t data_admit_allowed : 1;
-	/**!< Multi-factor data_admit allowed flag. */	
+	/*========== [Orthus FLAG BEGIN] ==========*/
 
-	uint8_t load_admit_allowed : 1;
-	/**!< Multi-factor load_admit allowed flag. */
+	/**
+	 * @brief Multi-factor data_admit allowed flag
+	 */
+	bool data_admit_allowed;
+
+	/**
+	 * @brief Multi-factor load_admit allowed flag
+	 */
+	bool load_admit_allowed;
+
+	/*========== [Orthus FLAG END] ==========*/
 
 	log_sid_t sid;
 	/*!< Tracing sequence ID */
