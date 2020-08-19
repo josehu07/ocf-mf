@@ -63,6 +63,9 @@ $ ./run-flashsim.sh core-sock core-ssd.conf
 $ ./bench cache-sock core-sock Intensity    # E.g., ./bench cache-sock core-sock 3600
 ```
 
+The exact way of invoking `./bench` depends on how you write the `main.c`. Currently, it is for intensity experiments.
+
+
 ## TODO List
 
 - [ ] Model in-device parallelism. For each volume, there is a submission queue (See `cache/cache-vol.c` and `core/core-vol.c`). Currently, it processes requests one at a time. However, it should process requests at a parallelism degree of the SSD's number of packages (channels).
