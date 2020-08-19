@@ -164,6 +164,8 @@ perform_workload_tp_hack(ocf_core_t core, int intensity,
     for (i = 0; i < PAGE_SIZE; ++i)
         *((char *) data->ptr + i) = (rand() % 26) + 97;
 
+    printf("\nFilling devices with random data...\n\n");
+
     /** Fill every page so that we can read any of them. */
     for (i = 0; i < total_pages; ++i) {
         int dir = OCF_WRITE;

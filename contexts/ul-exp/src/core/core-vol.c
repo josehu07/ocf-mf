@@ -198,6 +198,8 @@ _submit_thread_func(void *args)
 
 /*========== Core Volume Operations Implemention BEGIN. ==========*/
 
+extern char *core_sock_name;
+
 /**
  * Open a volume.
  * Here we store uuid as volume name and connect to FlashSim socket.
@@ -215,7 +217,7 @@ core_vol_open(ocf_volume_t core_vol, void *params)
     vol_priv->name = ocf_uuid_to_str(uuid);
     
     /** Prepare socket here. */
-    vol_priv->sock_name = "core-simssd";
+    vol_priv->sock_name = core_sock_name;
     vol_priv->sock_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
     if (vol_priv->sock_fd < 0) {
         DEBUG("OPEN: socket() failed");
