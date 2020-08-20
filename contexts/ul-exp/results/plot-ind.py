@@ -39,8 +39,8 @@ for filename in resfiles:
                 times.append(time)
                 miss_ratios.append(miss_ratio)
                 load_admits.append(load_admit)
-                cache_tps.append(cache_tp)
-                core_tps.append(core_tp)
+                cache_tps.append(cache_tp / 1024.0)     # MiB/s
+                core_tps.append(core_tp / 1024.0)       # MiB/s
 
             # elif line.startswith("Workload #2"):
             #     workload_change_time = times[-1]
@@ -76,7 +76,7 @@ for filename in resfiles:
     ax3.plot(times, core_tps, color='b', label="Core")
     ax3.set_ylim(-1000., 20000.)
     ax3.set_title("Throughput")
-    ax3.set_ylabel("(KB/s)")
+    ax3.set_ylabel("(MB/s)")
     ax3.legend(loc='center left')
 
     ax3.set_xlabel("Time (ms)")

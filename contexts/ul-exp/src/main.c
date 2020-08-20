@@ -32,6 +32,7 @@ const bool FLASHSIM_ENABLE_DATA = false;
 const unsigned long FLASHSIM_PAGE_SIZE = 4096;
 
 
+/** Using Multi-factor mode or not? */
 const bool USING_MF_MODE = false;
 
 
@@ -39,8 +40,11 @@ const bool USING_MF_MODE = false;
 FILE *fdevice  = NULL;
 FILE *fmonitor = NULL;
 
-const char *cache_sock_name = "cache-simssd";
-const char *core_sock_name  = "core-simssd";
+const char *cache_sock_name;
+const char *core_sock_name;
+
+int cache_parallelism;
+int core_parallelism;
 
 
 static void
@@ -210,14 +214,17 @@ main(int argc, char *argv[])
     struct ocf_stats_errors stats_errors;
     int intensity, ret;
 
-    if (argc != 4) {
-      fprintf(stderr, "Usage: ./sim CACHE_SOCK CORE_SOCK INTENSITY\n");
+    if (argc != 6) {
+      fprintf(stderr, "Usage: ./sim cache_sock cache_parallelism "
+                      "core_sock core_parallelism intensity\n");
       exit(1);
     }
 
     cache_sock_name = argv[1];
-    core_sock_name  = argv[2];
-    intensity = (int) strtol(argv[3], NULL, 10);
+    cache_parallelism = (int) strtol(argv[2], NULL, 10);
+    core_sock_name  = argv[3];
+    core_parallelism = (int) strtol(argv[4], NULL, 10);
+    intensity = (int) strtol(argv[5], NULL, 10);
 
     srand(time(NULL));
 
@@ -258,7 +265,10 @@ main(int argc, char *argv[])
     }
 
     /** 6. Perform workload. */
-    perform_workload_tp_hack(core, intensity, 150, 180);
+    // ret = perform_workload_fuzzy(core, 36000);
+    ret = perform_workload_tp_hack(core, intensity, 150, 180);
+    if (ret)
+      error("Error when performing workload", ret);
 
     /** 7. Stop the multi-factor monitor. */
     if (USING_MF_MODE)

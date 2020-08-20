@@ -24,6 +24,10 @@ extern bool FLASHSIM_ENABLE_DATA;
 extern unsigned long FLASHSIM_PAGE_SIZE;
 
 
+extern const char * const core_sock_name;
+extern const int core_parallelism;
+
+
 /**
  * A double-linked list as a request submitting queue. Request submission
  * operation pushes an entry into the queue and then ACKs immediately. A
@@ -57,6 +61,11 @@ static const size_t REQ_HEADER_LENGTH = 24;
 static const int FLASHSIM_DIR_READ  = 0;
 static const int FLASHSIM_DIR_WRITE = 1;
 
+
+/** This lock protects the FlashSim socket file. */
+static env_mutex core_device_lock;
+
+
 /**
  * Routines to read from or write to the storage device.
  */
@@ -74,9 +83,13 @@ _submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     header.size = io->bytes;
     header.start_time_us = (uint64_t) (1000 * start_time_ms);
 
+    /** Critical section: ensuring the three messages are always in order. */
+    env_mutex_lock(&core_device_lock);
+
     wbytes = write(sock_fd, &header, REQ_HEADER_LENGTH);
     if (wbytes != REQ_HEADER_LENGTH) {
         DEBUG("IO: write request header send failed");
+        env_mutex_unlock(&core_device_lock);
         return 1;
     }
 
@@ -85,6 +98,7 @@ _submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
         wbytes = write(sock_fd, data->ptr + data->offset, header.size);
         if (wbytes != (int) header.size) {
             DEBUG("IO: write request data send failed");
+            env_mutex_unlock(&core_device_lock);
             return 2;
         }
     }
@@ -93,8 +107,12 @@ _submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     rbytes = read(sock_fd, &time_used_us, 8);
     if (rbytes != 8) {
         DEBUG("IO: write processing time recv failed");
+        env_mutex_unlock(&core_device_lock);
         return 3;
     }
+
+    env_mutex_unlock(&core_device_lock);
+    /** Critical section ends. */
 
     usleep(time_used_us);   /** Simulate latency here. */
 
@@ -115,9 +133,13 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     header.size = io->bytes;
     header.start_time_us = (uint64_t) (1000 * start_time_ms);
 
+    /** Critical section: ensuring the three messages are always in order. */
+    env_mutex_lock(&core_device_lock);
+
     wbytes = write(sock_fd, &header, REQ_HEADER_LENGTH);
     if (wbytes != REQ_HEADER_LENGTH) {
         DEBUG("IO: read request header send failed");
+        env_mutex_unlock(&core_device_lock);
         return 1;
     }
 
@@ -126,6 +148,7 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
         rbytes = read(sock_fd, data->ptr + data->offset, header.size);
         if (rbytes != (int) header.size) {
             DEBUG("IO: read request data recv failed");
+            env_mutex_unlock(&core_device_lock);
             return 2;
         }
     }
@@ -134,8 +157,12 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     rbytes = read(sock_fd, &time_used_us, 8);
     if (rbytes != 8) {
         DEBUG("IO: read processing time recv failed");
+        env_mutex_unlock(&core_device_lock);
         return 3;
     }
+
+    env_mutex_unlock(&core_device_lock);
+    /** Critical section ends. */
 
     usleep(time_used_us);   /** Simulate latency here. */
 
@@ -143,7 +170,7 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
 }
 
 /**
- * Submission thread runs separately.
+ * Submission thread runs separately. ARGS is a pointer to package id.
  */
 static void *
 _submit_thread_func(void *args)
@@ -151,6 +178,11 @@ _submit_thread_func(void *args)
     struct req_entry *entry;
     struct ocf_io *io;
     double start_time_ms;
+
+    int pkg = *((int *) args);
+    free((int *) args);
+
+    DEBUG("SUBMIT: submission thread for package %d launched", pkg);
 
     while (1) {
         /** Wait when list is empty. */
@@ -172,8 +204,8 @@ _submit_thread_func(void *args)
         simfs_data_t *data = ocf_io_get_data(io);
         core_vol_priv_t *vol_priv = ocf_volume_get_priv(ocf_io_get_volume(io));
 
-        DEBUG("IO: dir = %s, core pos = 0x%08lx, len = %u",
-              io->dir == OCF_WRITE ? "WR <-" : "RD ->", io->addr, io->bytes);
+        // DEBUG("IO: dir = %s, core pos = 0x%08lx, len = %u",
+        //       io->dir == OCF_WRITE ? "WR <-" : "RD ->", io->addr, io->bytes);
 
         switch (io->dir) {
         case OCF_WRITE:
@@ -184,8 +216,10 @@ _submit_thread_func(void *args)
             break;
         }
 
-        if (io->dir == OCF_READ)
-            core_log_push_entry(start_time_ms, get_cur_time_ms(), io->bytes);
+        if (io->dir == OCF_READ) {
+            core_log_push_entry(pkg, start_time_ms, get_cur_time_ms(),
+                                io->bytes);
+        }
 
         io->end(io, 0);
     }
@@ -198,11 +232,12 @@ _submit_thread_func(void *args)
 
 /*========== Core Volume Operations Implemention BEGIN. ==========*/
 
-extern char *core_sock_name;
-
 /**
- * Open a volume.
+ * Open core volume.
  * Here we store uuid as volume name and connect to FlashSim socket.
+ *
+ * At any time, at most CORE_PARALLELISM requests are being processed
+ * concurrently. This models in-device parallelism.
  */
 static int
 core_vol_open(ocf_volume_t core_vol, void *params)
@@ -210,9 +245,7 @@ core_vol_open(ocf_volume_t core_vol, void *params)
     const struct ocf_volume_uuid *uuid = ocf_volume_get_uuid(core_vol);
     core_vol_priv_t *vol_priv = ocf_volume_get_priv(core_vol);
     struct sockaddr_un saddr;
-    pthread_t submit_thread_id;
-    pthread_attr_t submit_thread_attr;
-    int ret;
+    int ret, i;
 
     vol_priv->name = ocf_uuid_to_str(uuid);
     
@@ -246,25 +279,41 @@ core_vol_open(ocf_volume_t core_vol, void *params)
 
     env_completion_init(&submit_queue_sem);
 
-    /** Start the submit thread at volume open. */
-    ret = pthread_attr_init(&submit_thread_attr);
+    /** Initialize device lock. */
+    ret = env_mutex_init(&core_device_lock);
     if (ret) {
-        DEBUG("OPEN: submit thread creation failed");
+        DEBUG("OPEN: core device lock initialization failed");
         return ret;
     }
 
-    ret = pthread_attr_setdetachstate(&submit_thread_attr,
-                                      PTHREAD_CREATE_DETACHED);
-    if (ret) {
-        DEBUG("OPEN: submit thread creation failed");
-        return ret;
-    }
+    /** Start CORE_PARALLELISM submit threads at volume open. */
+    for (i = 0; i < core_parallelism; ++i) {
+        pthread_t submit_thread_id;
+        pthread_attr_t submit_thread_attr;
+        int *pkg_ptr;
 
-    ret = pthread_create(&submit_thread_id, &submit_thread_attr,
-                         _submit_thread_func, NULL);
-    if (ret) {
-        DEBUG("OPEN: submit thread creation failed");
-        return ret;
+        ret = pthread_attr_init(&submit_thread_attr);
+        if (ret) {
+            DEBUG("OPEN: submit thread %d creation failed", i);
+            return ret;
+        }
+
+        ret = pthread_attr_setdetachstate(&submit_thread_attr,
+                                          PTHREAD_CREATE_DETACHED);
+        if (ret) {
+            DEBUG("OPEN: submit thread %d creation failed", i);
+            return ret;
+        }
+
+        pkg_ptr = malloc(sizeof(int));
+        *pkg_ptr = i;
+
+        ret = pthread_create(&submit_thread_id, &submit_thread_attr,
+                             _submit_thread_func, (void *) pkg_ptr);
+        if (ret) {
+            DEBUG("OPEN: submit thread %d creation failed", i);
+            return ret;
+        }
     }
 
     DEBUG("OPEN: name = %s, sock = %s", vol_priv->name, vol_priv->sock_name);
@@ -288,6 +337,8 @@ core_vol_close(ocf_volume_t core_vol)
 
     env_mutex_destroy(&submit_queue_lock);
     env_completion_destroy(&submit_queue_sem);
+
+    env_mutex_destroy(&core_device_lock);
 }
 
 // Exposed for device logging.

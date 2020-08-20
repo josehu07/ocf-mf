@@ -57,6 +57,8 @@ cache_stop_callback(ocf_cache_t cache, void *callback_states,
 
 /*========== Device log implementation BEGIN ==========*/
 
+extern const int cache_parallelism;
+
 /**
  * Device circular log for throughput measurement. It records the
  * latest IOs through this device.
@@ -67,13 +69,13 @@ struct cache_log_entry {
     uint32_t bytes;
 };
 
-#define CACHE_LOG_LENGTH (120000)
-static struct cache_log_entry cache_log[CACHE_LOG_LENGTH];
+#define CACHE_LOG_SIZE_PER_PACKAGE (120000)
+static struct cache_log_entry **cache_log;
 
-static int cache_log_head = -1;
-static int cache_log_tail = -1;
+static int *cache_log_head;
+static int *cache_log_tail;
 
-static env_rwlock cache_log_lock;
+static env_rwlock *cache_log_lock;
 
 // Exposed for device logging.
 extern double base_time_ms;
@@ -83,31 +85,33 @@ extern double base_time_ms;
  * the log is full. Returns the timestamp for this entry.
  */
 void
-cache_log_push_entry(double start_time_ms, double finish_time_ms,
+cache_log_push_entry(int pkg, double start_time_ms, double finish_time_ms,
                      uint32_t bytes)
 {
     int pos;
 
-    env_rwlock_write_lock(&cache_log_lock);
+    env_rwlock_write_lock(&cache_log_lock[pkg]);
 
-    pos = (cache_log_tail + 1) % CACHE_LOG_LENGTH;
+    pos = (cache_log_tail[pkg] + 1) % CACHE_LOG_SIZE_PER_PACKAGE;
 
-    cache_log[pos].start_time_ms = start_time_ms;
-    cache_log[pos].finish_time_ms = finish_time_ms;
-    cache_log[pos].bytes = bytes;
+    cache_log[pkg][pos].start_time_ms = start_time_ms;
+    cache_log[pkg][pos].finish_time_ms = finish_time_ms;
+    cache_log[pkg][pos].bytes = bytes;
 
-    cache_log_tail = pos;
-    if (cache_log_tail == cache_log_head)
-        cache_log_head = (cache_log_head + 1) % CACHE_LOG_LENGTH;
+    cache_log_tail[pkg] = pos;
+    if (cache_log_tail[pkg] == cache_log_head[pkg]) {
+        cache_log_head[pkg] = (cache_log_head[pkg] + 1)
+                              % CACHE_LOG_SIZE_PER_PACKAGE;
+    }
 
-    if (cache_log_head < 0)
-        cache_log_head = 0;
+    if (cache_log_head[pkg] < 0)
+        cache_log_head[pkg] = 0;
 
     fprintf(fdevice, "cache req: %.3lf - %.3lf of %u\n",
             start_time_ms - base_time_ms,
             finish_time_ms - base_time_ms, bytes);
 
-    env_rwlock_write_unlock(&cache_log_lock);
+    env_rwlock_write_unlock(&cache_log_lock[pkg]);
 }
 
 /**
@@ -117,24 +121,27 @@ double
 cache_log_query_throughput(double begin_time_ms, double end_time_ms)
 {
     double kilobytes = 0.0;
+    int pkg;
 
-    env_rwlock_read_lock(&cache_log_lock);
+    for (pkg = 0; pkg < cache_parallelism; ++pkg) {
+        env_rwlock_read_lock(&cache_log_lock[pkg]);
 
-    if (cache_log_head >= 0) {
-        int i = cache_log_tail + 1;
+        if (cache_log_head[pkg] >= 0) {
+            int i = cache_log_tail[pkg] + 1;
 
-        do {
-            i = i == 0 ? CACHE_LOG_LENGTH - 1 : i - 1;
+            do {
+                i = i == 0 ? CACHE_LOG_SIZE_PER_PACKAGE - 1 : i - 1;
 
-            if (cache_log[i].finish_time_ms <= begin_time_ms)
-                break;
+                if (cache_log[pkg][i].finish_time_ms <= begin_time_ms)
+                    break;
 
-            if (cache_log[i].finish_time_ms <= end_time_ms)
-                kilobytes += (double) cache_log[i].bytes / 1024.0;
-        } while (i != cache_log_head);
+                if (cache_log[pkg][i].finish_time_ms <= end_time_ms)
+                    kilobytes += (double) cache_log[pkg][i].bytes / 1024.0;
+            } while (i != cache_log_head[pkg]);
+        }
+
+        env_rwlock_read_unlock(&cache_log_lock[pkg]);
     }
-
-    env_rwlock_read_unlock(&cache_log_lock);
 
     return (kilobytes * 1000.0) / (end_time_ms - begin_time_ms);
 }
@@ -154,7 +161,7 @@ cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache, bool using_mf_mode)
     struct ocf_mngt_cache_device_config device_cfg;
     cache_obj_priv_t *cache_obj_priv;
     struct cache_setup_callback_states callback_states;
-    int ret;
+    int ret, i;
 
     /** Let the callback state point to this functions return value. */
     callback_states.error = &ret;
@@ -239,9 +246,18 @@ cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache, bool using_mf_mode)
     }
 
     /** Setup device log. */
-    cache_log_head = -1;
-    cache_log_tail = -1;
-    env_rwlock_init(&cache_log_lock);
+    cache_log = malloc(sizeof(struct cache_log_entry *) * cache_parallelism);
+    cache_log_head = malloc(sizeof(int) * cache_parallelism);
+    cache_log_tail = malloc(sizeof(int) * cache_parallelism);
+    cache_log_lock = malloc(sizeof(env_rwlock) * cache_parallelism);
+
+    for (i = 0; i < cache_parallelism; ++i) {
+        cache_log[i] = malloc(sizeof(struct cache_log_entry)
+                              * CACHE_LOG_SIZE_PER_PACKAGE);
+        cache_log_head[i] = -1;
+        cache_log_tail[i] = -1;
+        env_rwlock_init(&cache_log_lock[i]);
+    }
 
     DEBUG("SETUP: done");
 
@@ -257,7 +273,7 @@ cache_obj_stop(ocf_cache_t cache)
 {
     cache_obj_priv_t *cache_obj_priv;
     struct cache_stop_callback_states callback_states;
-    int ret = 0;
+    int ret = 0, i;
 
     /** Let the callback state point to this functions return value. */
     callback_states.error = &ret;
@@ -271,7 +287,16 @@ cache_obj_stop(ocf_cache_t cache)
     ocf_queue_put(cache_obj_priv->mngt_queue);
     free(cache_obj_priv);
 
-    env_rwlock_destroy(&cache_log_lock);
+    /** Free device log. */
+    for (i = 0; i < cache_parallelism; ++i) {
+        env_rwlock_destroy(&cache_log_lock[i]);
+        free(cache_log[i]);
+    }
+
+    free(cache_log);
+    free(cache_log_head);
+    free(cache_log_tail);
+    free(cache_log_lock);
 
     DEBUG("STOP: done");
 

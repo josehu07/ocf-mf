@@ -44,8 +44,8 @@ for filename in resfiles:
                 times.append(time)
                 # miss_ratios.append(miss_ratio)
                 load_admits.append(load_admit)
-                cache_tps.append(cache_tp)
-                core_tps.append(core_tp)
+                cache_tps.append(cache_tp / 1024.0)     # MiB/s
+                core_tps.append(core_tp / 1024.0)       # MiB/s
 
     idx_begin, idx_end = None, None
 
@@ -92,7 +92,7 @@ ax1.bar([v+40 for v in avg_cache_tps['mf'].keys()], avg_cache_tps['mf'].values()
 ax1.set_title("Cache Throughput")
 ax1.set_xticks(range(2000, 4200, 200))
 ax1.set_ylim((0, 16000))
-ax1.set_ylabel("(KB/s)")
+ax1.set_ylabel("(MB/s)")
 ax1.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
 ax2 = fig.add_subplot(gs[1,:])
@@ -101,7 +101,7 @@ ax2.bar([v+40 for v in avg_core_tps['mf'].keys()], avg_core_tps['mf'].values(), 
 ax2.set_title("Core Throughput")
 ax2.set_xticks(range(2000, 4200, 200))
 ax2.set_ylim((0, 16000))
-ax2.set_ylabel("(KB/s)")
+ax2.set_ylabel("(MB/s)")
 ax2.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
 ax3 = fig.add_subplot(gs[2:,:])
@@ -110,7 +110,7 @@ ax3.bar([v+40 for v in avg_total_tps['mf'].keys()], avg_total_tps['mf'].values()
 ax3.set_title("Total Throughput")
 ax3.set_xticks(range(2000, 4200, 200))
 ax3.set_ylim((0, 16000))
-ax3.set_ylabel("(KB/s)")
+ax3.set_ylabel("(MB/s)")
 ax3.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
 ax3.set_xlabel("Intensity (#4K-Reqs/s)")

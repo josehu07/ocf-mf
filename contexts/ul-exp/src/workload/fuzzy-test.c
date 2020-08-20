@@ -18,6 +18,9 @@
 #include "fuzzy-test.h"
 
 
+extern const bool FLASHSIM_ENABLE_DATA;
+
+
 /** Absolute buffer holding data we expect. */
 static char *abs_buf;
 
@@ -41,6 +44,15 @@ struct expected_page {
 
 static struct expected_page expects;
 static env_mutex expects_mutex;
+
+
+/**
+ * These are to ensure that all requests are processed before the `perform_`
+ * func returns.
+ */
+static int pending_requests = 0;
+static env_mutex pending_requests_mutex;
+static env_completion pending_requests_sem;
 
 
 /**
@@ -129,6 +141,15 @@ write_cmpl_callback(struct ocf_io *io, int error)
     /** Free data buffer and I/O structure in callback. */
     simfs_data_free(data);
     ocf_io_put(io);
+
+    /** Decrement number of pending requests. */
+    env_mutex_lock(&pending_requests_mutex);
+    
+    pending_requests--;
+    if (pending_requests == 0)
+        env_completion_complete(&pending_requests_sem);
+
+    env_mutex_unlock(&pending_requests_mutex);
 }
 
 static void
@@ -145,6 +166,15 @@ read_cmpl_callback(struct ocf_io *io, int error)
     /** Free data buffer and I/O structure in callback. */
     simfs_data_free(data);
     ocf_io_put(io);
+
+    /** Decrement number of pending requests. */
+    env_mutex_lock(&pending_requests_mutex);
+    
+    pending_requests--;
+    if (pending_requests == 0)
+        env_completion_complete(&pending_requests_sem);
+
+    env_mutex_unlock(&pending_requests_mutex);
 }
 
 
@@ -192,9 +222,15 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
 {
     int i, ret;
 
-    /** Must do at least 10000 IOs. */
-    if (num_ios < 12000)
+    /** Must have ENABLE_DATA == true when doing this fuzzy testing. */
+    if (! FLASHSIM_ENABLE_DATA) {
+        fprintf(stderr, "Fuzzy testing requires ENABLE_DATA option on.\n");
         return -1;
+    }
+
+    /** Must do at least 12000 IOs. */
+    if (num_ios < 12000)
+        return -2;
 
     /** Initialize the expected pages list for read verification. */
     INIT_LIST_HEAD(&expects.head);
@@ -202,6 +238,15 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
     ret = env_mutex_init(&expects_mutex);
     if (ret)
         return ret;
+
+    /** Initialize pending request related stuff. */
+    pending_requests = 0;
+
+    ret = env_mutex_init(&pending_requests_mutex);
+    if (ret)
+        return ret;
+
+    env_completion_init(&pending_requests_sem);
 
     /**
      * Allocate absolute buffer to hold the data we expect, same size
@@ -222,7 +267,8 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
     total_reads_count = 0;
     valid_reads_count = 0;
 
-    printf("\nProgress:\n\n");
+    printf("Issuing IO requests...");
+    fflush(stdout);
 
     /** Loop and perform random IOs. */
     for (i = 0; i < num_ios; ++i) {
@@ -285,10 +331,16 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
                 return ret;
         }
 
-        /** Progress printing. */
-        if ((i + 1) % 1000 == 0)
-            printf("  ... %d / %d reqs\n", i + 1, num_ios);
+        /** Increment number of pending requests. */
+        env_mutex_lock(&pending_requests_mutex);
+        pending_requests++;
+        env_mutex_unlock(&pending_requests_mutex);
     }
+
+    /** Wait until all pending requests have been processed. */
+    env_completion_wait(&pending_requests_sem);
+
+    printf(" Done.\n");
 
     /** Check whether 100% of the reads are consistent. */
     ENV_BUG_ON(total_reads_count <= 0);

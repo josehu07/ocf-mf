@@ -19,6 +19,9 @@
 #include "../../../src/engine/engine_mf.h"
 
 
+extern const bool FLASHSIM_ENABLE_DATA;
+
+
 // Exposed for device logging.
 double base_time_ms = 0.0;
 
@@ -147,8 +150,15 @@ perform_workload_tp_hack(ocf_core_t core, int intensity,
 {
     int total_pages = CORE_VOL_SIZE / PAGE_SIZE;
     int i, ret, num_reqs = 0;
-    // double cur_time_ms, base_time_ms, log_interval_ms = 0.0;
     double cur_time_ms, log_interval_ms = 0.0;
+
+    /** Must have ENABLE_DATA == false when doing this benchmarking. */
+    if (FLASHSIM_ENABLE_DATA) {
+        fprintf(stderr, "Recommend having ENABLE_DATA option off "
+                        "when benchmarking.\n");
+        return -1;
+    }
+
     simfs_data_t *data = simfs_data_alloc(1);
 
     /**
@@ -179,7 +189,7 @@ perform_workload_tp_hack(ocf_core_t core, int intensity,
         usleep(3000);
     }
 
-    printf("\nProgress:\n\n");
+    printf("\nExperiment starts... Progress:\n\n");
 
     /**
      * Loop and perform random reads, one page each, following the
