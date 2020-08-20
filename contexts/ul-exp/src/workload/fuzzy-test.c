@@ -18,9 +18,6 @@
 #include "fuzzy-test.h"
 
 
-extern const bool FLASHSIM_ENABLE_DATA;
-
-
 /** Absolute buffer holding data we expect. */
 static char *abs_buf;
 
@@ -223,7 +220,7 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
     int i, ret;
 
     /** Must have ENABLE_DATA == true when doing this fuzzy testing. */
-    if (! FLASHSIM_ENABLE_DATA) {
+    if (! flashsim_enable_data) {
         fprintf(stderr, "Fuzzy testing requires ENABLE_DATA option on.\n");
         return -1;
     }
@@ -252,17 +249,17 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
      * Allocate absolute buffer to hold the data we expect, same size
      * as the backend core device.
      */
-    abs_buf = malloc(CORE_VOL_SIZE);
+    abs_buf = malloc(core_capacity_bytes);
     if (abs_buf == NULL)
         return -ENOMEM;
 
-    memset(abs_buf, 0, CORE_VOL_SIZE);
+    memset(abs_buf, 0, core_capacity_bytes);
 
-    bit_map = malloc((CORE_VOL_SIZE / PAGE_SIZE) / 8);
+    bit_map = malloc((core_capacity_bytes / PAGE_SIZE) / 8);
     if (bit_map == NULL)
         return -ENOMEM;
 
-    memset(bit_map, 0, (CORE_VOL_SIZE / PAGE_SIZE) / 8);
+    memset(bit_map, 0, (core_capacity_bytes / PAGE_SIZE) / 8);
 
     total_reads_count = 0;
     valid_reads_count = 0;
@@ -293,7 +290,7 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
 
         /** Write: Put in ID + random alpha char data in each sector. */
         if (dir == OCF_WRITE) {
-            page_no = rand() % (CORE_VOL_SIZE / PAGE_SIZE);
+            page_no = rand() % (core_capacity_bytes / PAGE_SIZE);
             addr = page_no * PAGE_SIZE;
 
             for (j = 0; j < size / 512; ++j) {
@@ -322,7 +319,7 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
         /** Read: only choose from written pages. */
         } else {
             do {
-                page_no = rand() % (CORE_VOL_SIZE / PAGE_SIZE);
+                page_no = rand() % (core_capacity_bytes / PAGE_SIZE);
             } while ((bit_map[page_no / 8] & (1 << (page_no % 8))) == 0);
             addr = page_no * PAGE_SIZE;
 

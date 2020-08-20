@@ -26,9 +26,11 @@ Folder structure:
  |   |- posix/      # POSIX environment specific support
  |- inc/            # OCF headers exposed to context code
  |- src/            # OCF library source code
- |   |- engine/             # Multi-factor caching is implemented as a new cache mode `mf`
- |   |                      # Everything I have added are marked by `[Orthus FLAG BEGIN]`
- |   |                      # and `[Orthus FLAG END]`.
+ |   |- engine/             
+ |   |   |- engine_mf.c     # Multi-factor caching is implemented as a new cache mode `mf`
+ |   |   |- engine_mf.h     # Everything I have added are marked by `[Orthus FLAG BEGIN]`
+ |   |   |- mf_monitor.c    # and `[Orthus FLAG END]`. 
+ |   |   |- ...
  |   |- ...
 ```
 
@@ -54,13 +56,13 @@ This will link the OCF library to this location and compile it together with you
 
 ```bash
 # In shell 1
-$ ./run-flashsim.sh cache-sock cache-ssd.conf
+$ ./run-flashsim.sh cache
 
 # In shell 2
-$ ./run-flashsim.sh core-sock core-ssd.conf
+$ ./run-flashsim.sh core
 
 # In shell 3
-$ ./bench cache-sock core-sock Intensity    # E.g., ./bench cache-sock core-sock 3600
+$ ./bench wa|mf|pt intensity    # E.g., ./bench mf 10000
 ```
 
 The exact way of invoking `./bench` depends on how you write the `main.c`. Currently, it is for intensity experiments.
@@ -68,10 +70,10 @@ The exact way of invoking `./bench` depends on how you write the `main.c`. Curre
 
 ## TODO List
 
-- [ ] Model in-device parallelism. For each volume, there is a submission queue (See `cache/cache-vol.c` and `core/core-vol.c`). Currently, it processes requests one at a time. However, it should process requests at a parallelism degree of the SSD's number of packages (channels).
-- [ ] Better ways of measuring throughput? Currently, each backend keeps a log of finished requests (See `cache/cache-obj.c` and `core/core-obj.c`).
+- [x] Model in-device parallelism. For each volume, there is a submission queue (See `cache/cache-vol.c` and `core/core-vol.c`). Currently, it processes requests one at a time. However, it should process requests at a parallelism degree of the SSD's number of packages (channels).
 - [ ] More sophisticated benchmarking logic in `workload/...`.
 - [ ] Porting the `mf` cache mode to Open CAS Linux: Need to ensure that it is implemented in a kernel-safe way. (Currently it is not 100% safe - for example, it directly uses `pthread_create()` and `malloc()`.)
+- [ ] Better ways of measuring throughput? Currently, each backend keeps a log of finished requests (See `cache/cache-obj.c` and `core/core-obj.c`).
 
 
 ## Original README

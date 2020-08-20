@@ -57,8 +57,6 @@ remove_core_callback(void *callback_states, int error)
 
 /*========== Device log implementation BEGIN ==========*/
 
-extern const int core_parallelism;
-
 /**
  * Device circular log for throughput measurement. It records the
  * latest IOs through this device.
@@ -107,9 +105,11 @@ core_log_push_entry(int pkg, double start_time_ms, double finish_time_ms,
     if (core_log_head[pkg] < 0)
         core_log_head[pkg] = 0;
 
-    fprintf(fdevice, "core req: %.3lf - %.3lf of %u\n",
-            start_time_ms - base_time_ms,
-            finish_time_ms - base_time_ms, bytes);
+    if (DEVICE_LOG_ENABLE) {
+        fprintf(fdevice, "core req: %.3lf - %.3lf of %u\n",
+                start_time_ms - base_time_ms,
+                finish_time_ms - base_time_ms, bytes);
+    }
 
     env_rwlock_write_unlock(&core_log_lock[pkg]);
 }

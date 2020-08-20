@@ -14,8 +14,7 @@
 
 
 #define CORE_VOL_TYPE (2)
-#define CORE_VOL_SIZE (40*1024*1024)    /** Core size: 40MiB, 1/4 actual. */
-#define CORE_VOL_MAX_IO_SIZE (32*1024)     /** Max I/O size: 32KiB. */
+#define CORE_VOL_MAX_IO_SIZE (4*1024)   /** Max I/O size: 4 KiB. */
 
 
 /**
@@ -40,6 +39,8 @@ struct core_vol_io_priv {
 
 typedef struct core_vol_io_priv core_vol_io_priv_t;
 
+
+void core_vol_force_stop();
 
 int core_vol_register(ocf_ctx_t ctx);
 void core_vol_unregister(ocf_ctx_t ctx);

@@ -141,8 +141,10 @@ monitor_wait_stable(ocf_core_t core)
         last_miss_ratio = miss_ratio;
         miss_ratio = _get_miss_ratio(core);
 
-        fprintf(fmonitor, "  (wait) miss ratio = %.5lf -> %.5lf\n",
-                last_miss_ratio, miss_ratio);
+        if (MONITOR_LOG_ENABLE) {
+            fprintf(fmonitor, "  (wait) miss ratio = %.5lf -> %.5lf\n",
+                    last_miss_ratio, miss_ratio);
+        }
     }
 
     return miss_ratio;
@@ -176,7 +178,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
 
         /** Get middle ratio (current `load_admit`) throughput. */
         la2 = monitor_query_load_admit();
-        if (iteration % 10 == 0) {
+        if (MONITOR_LOG_ENABLE && iteration % 10 == 0) {
             fprintf(fmonitor, "  (tune) iter #%lld: load_admit = %.3lf\n",
                     iteration, la2);
         }
@@ -200,7 +202,8 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
              */
             double miss_ratio = _get_miss_ratio(core);
             if (miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD) {
-                fprintf(fmonitor, "  (tune) miss ratio too high, quit\n");
+                if (MONITOR_LOG_ENABLE)
+                    fprintf(fmonitor, "  (tune) miss ratio too high, quit\n");
                 return;
             }
 
@@ -257,7 +260,9 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
                 second_chance = false;
                 continue;
             } else {
-                fprintf(fmonitor, "  (tune) load_admit stays 100%%, quit\n");
+                if (MONITOR_LOG_ENABLE)
+                    fprintf(fmonitor, "  (tune) load_admit stays 100%%, "
+                                      "quit\n");
                 return;
             }
         }
@@ -276,17 +281,22 @@ monitor_func(void *core_ptr)
         double base_miss_ratio;
 
         /** Start a new workload with classic caching. */
-        fprintf(fmonitor, "  (fall) start classic caching\n");
+        if (MONITOR_LOG_ENABLE)
+            fprintf(fmonitor, "  (fall) start classic caching\n");
         monitor_set_data_admit(true);
         monitor_set_load_admit(1.0);
 
         /** Wait until cache is stable. */
         base_miss_ratio = monitor_wait_stable(core);
-        fprintf(fmonitor, "  (wait) cache is stable\n");
+        if (MONITOR_LOG_ENABLE)
+            fprintf(fmonitor, "  (wait) cache is stable\n");
 
         /** Turn off `data_admit` and start `load_admit` tuning. */
         monitor_set_data_admit(false);
-        fprintf(fmonitor, "  (tune) turn off data_admit & start tuning\n");
+        if (MONITOR_LOG_ENABLE) {
+            fprintf(fmonitor, "  (tune) turn off data_admit & start "
+                              "tuning\n");
+        }
         monitor_tune_load_admit(base_miss_ratio, core);
     }
 

@@ -19,12 +19,8 @@
 #include "cache-vol.h"
 
 
-extern bool FLASHSIM_ENABLE_DATA;
-extern unsigned long FLASHSIM_PAGE_SIZE;
-
-
-extern const char * const cache_sock_name;
-extern const int cache_parallelism;
+/** Indicates whether we should exit without finishing pending requests. */
+static env_atomic should_stop;
 
 
 /**
@@ -93,7 +89,7 @@ _submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     }
 
     /** Data to write, only if passing actual data. */
-    if (FLASHSIM_ENABLE_DATA) {
+    if (flashsim_enable_data) {
         wbytes = write(sock_fd, data->ptr + data->offset, header.size);
         if (wbytes != (int) header.size) {
             DEBUG("IO: write request data send failed");
@@ -143,7 +139,7 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     }
 
     /** Data read out, only if passing actual data. */
-    if (FLASHSIM_ENABLE_DATA) {
+    if (flashsim_enable_data) {
         rbytes = read(sock_fd, data->ptr + data->offset, header.size);
         if (rbytes != (int) header.size) {
             DEBUG("IO: read request data recv failed");
@@ -187,8 +183,20 @@ _submit_thread_func(void *args)
         /** Wait when list is empty. */
         env_completion_wait(&submit_queue_sem);
 
+        /** Force quit. */
+        if (env_atomic_read(&should_stop) != 0) {
+            env_completion_complete(&submit_queue_sem);
+            pthread_exit(NULL);
+            return NULL;    // Not reached.
+        }
+
         /** Extract an entry from queue head. */
         env_mutex_lock(&submit_queue_lock);
+
+        if (list_empty(&submit_queue.head)) {
+            env_mutex_unlock(&submit_queue_lock);
+            continue;
+        }
 
         entry = list_first_entry(&submit_queue.head, struct req_entry, head);
         io = entry->io;
@@ -224,7 +232,6 @@ _submit_thread_func(void *args)
     }
 
     // Not reached.
-    pthread_exit(NULL);
     return NULL;
 }
 
@@ -284,6 +291,8 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
         DEBUG("OPEN: cache device lock initialization failed");
         return ret;
     }
+
+    env_atomic_set(&should_stop, 0);
 
     /** Start CACHE_PARALLELISM submit threads at volume open. */
     for (i = 0; i < cache_parallelism; ++i) {
@@ -354,7 +363,7 @@ cache_vol_submit_io(struct ocf_io *io)
     int queue_depth;
 
     /** Address must be page-aligned. */
-    if (io->addr % FLASHSIM_PAGE_SIZE != 0) {
+    if (io->addr % flashsim_page_size != 0) {
         DEBUG("IO: unaligned addr 0x%08lx", io->addr);
         io->end(io, 1);
         return;
@@ -374,9 +383,11 @@ cache_vol_submit_io(struct ocf_io *io)
     list_add_tail(&entry->head, &submit_queue.head);
     env_completion_complete(&submit_queue_sem);
 
-    sem_getvalue(&submit_queue_sem.sem, &queue_depth);
-    fprintf(fdevice, "cache queue: @ %.3lf, depth = %d\n",
-            entry->start_time_ms - base_time_ms, queue_depth);
+    if (DEVICE_LOG_ENABLE) {
+        sem_getvalue(&submit_queue_sem.sem, &queue_depth);
+        fprintf(fdevice, "cache queue: @ %.3lf, depth = %d\n",
+                entry->start_time_ms - base_time_ms, queue_depth);
+    }
 
     env_mutex_unlock(&submit_queue_lock);
 }
@@ -418,7 +429,7 @@ cache_vol_get_max_io_size(ocf_volume_t cache_vol)
 static uint64_t
 cache_vol_get_length(ocf_volume_t cache_vol)
 {
-    return CACHE_VOL_SIZE;
+    return cache_capacity_bytes;
 }
 
 
@@ -484,6 +495,35 @@ const struct ocf_volume_properties cache_vol_properties = {
 };
 
 /*========== Cache Volume Operations Implemention END. ==========*/
+
+
+/**
+ * Indicate that submission threads should stop, without finishing pending
+ * requests in queue.
+ */
+void
+cache_vol_force_stop()
+{
+    struct req_entry *entry;
+    struct ocf_io *io;
+
+    env_mutex_lock(&submit_queue_lock);
+
+    while (! list_empty(&submit_queue.head)) {
+        entry = list_first_entry(&submit_queue.head,
+                                 struct req_entry, head);
+        io = entry->io;
+
+        list_del(&entry->head);
+        free(entry);
+
+        io->end(io, 0);
+    }
+
+    env_mutex_unlock(&submit_queue_lock);
+
+    env_atomic_inc(&should_stop);
+}
 
 
 /**

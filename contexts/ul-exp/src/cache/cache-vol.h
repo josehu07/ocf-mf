@@ -14,8 +14,7 @@
 
 
 #define CACHE_VOL_TYPE (1)
-#define CACHE_VOL_SIZE (24*1024*1024)   /** Cache size: 24MiB, 1/4 actual. */
-#define CACHE_VOL_MAX_IO_SIZE (32*1024)     /** Max I/O size: 32KiB. */
+#define CACHE_VOL_MAX_IO_SIZE (4*1024)  /** Max I/O size: 4 KiB. */
 
 
 /**
@@ -40,6 +39,8 @@ struct cache_vol_io_priv {
 
 typedef struct cache_vol_io_priv cache_vol_io_priv_t;
 
+
+void cache_vol_force_stop();
 
 int cache_vol_register(ocf_ctx_t ctx);
 void cache_vol_unregister(ocf_ctx_t ctx);

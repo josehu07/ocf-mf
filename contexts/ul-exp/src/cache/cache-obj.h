@@ -14,6 +14,8 @@
 #include <ocf/ocf.h>
 #include "ocf_env.h"
 
+#include "common.h"
+
 
 /**
  * Cache object private data.
@@ -32,7 +34,8 @@ void cache_log_push_entry(int pkg, double begin_time_ms, double end_time_ms,
 double cache_log_query_throughput(double begin_time_ms, double end_time_ms);
 
 
-int cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache, bool using_mf_mode);
+int cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache,
+                    enum bench_cache_mode cache_mode);
 int cache_obj_stop(ocf_cache_t cache);
 
 

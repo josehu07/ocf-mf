@@ -15,6 +15,34 @@
 #include <sys/time.h>
 #include <ocf/ocf.h>
 
+
+/** Options. */
+const bool CTX_PRINT_DEBUG_MSG = false;
+const bool OCF_LOGGER_INFO_MSG = false;
+
+const bool DEVICE_LOG_ENABLE  = false;
+const bool MONITOR_LOG_ENABLE = false;
+
+
+/** Global parameters. */
+const char *cache_sock_name = "cache-sock";
+const char *core_sock_name  = "core-sock";
+
+double cpu_freq_mhz = -1.0;
+
+int cache_parallelism = 0;
+int core_parallelism  = 0;
+
+uint64_t cache_capacity_bytes = 0;
+uint64_t core_capacity_bytes  = 0;
+
+bool flashsim_enable_data;
+unsigned long flashsim_page_size = 4096;
+
+FILE *fdevice  = NULL;
+FILE *fmonitor = NULL;
+
+
 #include "simfs/simfs-ctx.h"
 #include "cache/cache-vol.h"
 #include "cache/cache-obj.h"
@@ -22,29 +50,7 @@
 #include "core/core-obj.h"
 #include "workload/fuzzy-test.h"
 #include "workload/tp-hacking.h"
-
-
-const bool CTX_PRINT_DEBUG_MSG = false;
-const bool OCF_LOGGER_INFO_MSG = false;
-
-
-const bool FLASHSIM_ENABLE_DATA = false;
-const unsigned long FLASHSIM_PAGE_SIZE = 4096;
-
-
-/** Using Multi-factor mode or not? */
-const bool USING_MF_MODE = false;
-
-
-/** Global handles. */
-FILE *fdevice  = NULL;
-FILE *fmonitor = NULL;
-
-const char *cache_sock_name;
-const char *core_sock_name;
-
-int cache_parallelism;
-int core_parallelism;
+#include "common.h"
 
 
 static void
@@ -56,22 +62,29 @@ error(const char *msg, int error)
 
 
 /**
- * Controlling global time in ms.
+ * Controlling global time in ms. Assumes Intel CPU.
  */
-static struct timeval boot_time;
+static uint64_t boot_cpu_cycle;
+
+static inline uint64_t
+rdtsc()
+{
+    uint32_t lo, hi;
+    __asm__ __volatile__ (
+      "xorl %%eax, %%eax\n"
+      "cpuid\n"
+      "rdtsc\n"
+      : "=a" (lo), "=d" (hi)
+      :
+      : "%ebx", "%ecx");
+    return (uint64_t) hi << 32 | lo;
+}
 
 double
 get_cur_time_ms()
 {
-    struct timeval cur_time;
-    double cur_time_ms;
-
-    gettimeofday(&cur_time, NULL);
-
-    cur_time_ms = (double) (cur_time.tv_sec - boot_time.tv_sec) * 1000
-                + (double) (cur_time.tv_usec - boot_time.tv_usec) / 1000;
-
-    return cur_time_ms;
+    uint64_t cur_cpu_cycle = rdtsc();
+    return (cur_cpu_cycle - boot_cpu_cycle) / (cpu_freq_mhz * 1000);
 }
 
 
@@ -79,7 +92,7 @@ get_cur_time_ms()
  * Display collected statistics.
  */
 static void
-print_statistics(struct ocf_stats_usage *stats_usage,
+_print_statistics(struct ocf_stats_usage *stats_usage,
                  struct ocf_stats_requests *stats_reqs,
                  struct ocf_stats_blocks *stats_blocks,
                  struct ocf_stats_errors *stats_errors)
@@ -200,6 +213,133 @@ print_statistics(struct ocf_stats_usage *stats_usage,
 
 
 /**
+ * Read the `/proc/cpuinfo` virtual file for CPU frequency.
+ */
+static void
+_read_cpu_frequency()
+{
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t rlen = 0;
+
+    FILE *fcpu = fopen("/proc/cpuinfo", "r");
+    if (fcpu == NULL)
+        error("Cannot open `/proc/cpuinfo`", 1);
+
+    while ((rlen = getline(&line, &len, fcpu)) != -1) {
+        if (rlen > 7 && (! strncmp(line, "cpu MHz", 7))) {
+            sscanf(line, "cpu MHz         : %lf\n", &cpu_freq_mhz);
+            break;
+        }
+    }
+
+    if (cpu_freq_mhz <= 0.0)
+        error("Invalid CPU frequency MHz number", 1);
+    printf("  CPU frequency: %.3lf MHz\n", cpu_freq_mhz);
+}
+
+/**
+ * Read cache and core device config files.
+ */
+static void
+_read_cache_device_config()
+{
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t rlen = 0;
+
+    FILE *fcache = fopen("cache-ssd.conf", "r");
+    if (fcache == NULL)
+        error("Cannot open `cache-ssd.conf`", 2);
+
+    uint64_t package_size = 0, die_size = 0, plane_size = 0,
+             block_size = 0, page_size = 0;
+
+    while ((rlen = getline(&line, &len, fcache)) != -1) {
+        if (rlen > 8 && (! strncmp(line, "SSD_SIZE", 8)))
+            sscanf(line, "SSD_SIZE %d\n", &cache_parallelism);
+        else if (rlen > 12 && (! strncmp(line, "PACKAGE_SIZE", 12)))
+            sscanf(line, "PACKAGE_SIZE %lu\n", &package_size);
+        else if (rlen > 8 && (! strncmp(line, "DIE_SIZE", 8)))
+            sscanf(line, "DIE_SIZE %lu\n", &die_size);
+        else if (rlen > 10 && (! strncmp(line, "PLANE_SIZE", 10)))
+            sscanf(line, "PLANE_SIZE %lu\n", &plane_size);
+        else if (rlen > 10 && (! strncmp(line, "BLOCK_SIZE", 10)))
+            sscanf(line, "BLOCK_SIZE %lu\n", &block_size);
+        else if (rlen > 9 && (! strncmp(line, "PAGE_SIZE", 9)))
+            sscanf(line, "PAGE_SIZE %lu\n", &page_size);
+    }
+
+    if (cache_parallelism <= 0)
+        error("Invalid cache SSD number of packages", 2);
+    printf("  Cache parallelism: %d\n", cache_parallelism);
+
+    cache_capacity_bytes = cache_parallelism * package_size * die_size
+                           * plane_size * block_size * page_size;
+    cache_capacity_bytes = (uint64_t) (cache_capacity_bytes
+                                       * 0.5);  /** Only use 40%. */
+    if (cache_capacity_bytes <= 0)
+        error("Invalid cache SSD capacity", 2);
+    printf("  Cache 50%% capacity: %ld bytes\n", cache_capacity_bytes);
+}
+
+static void
+_read_core_device_config()
+{
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t rlen = 0;
+
+    FILE *fcore = fopen("core-ssd.conf", "r");
+    if (fcore == NULL)
+        error("Cannot open `core-ssd.conf`", 3);
+
+    uint64_t package_size = 0, die_size = 0, plane_size = 0,
+             block_size = 0, page_size = 0;
+
+    while ((rlen = getline(&line, &len, fcore)) != -1) {
+        if (rlen > 8 && (! strncmp(line, "SSD_SIZE", 8)))
+            sscanf(line, "SSD_SIZE %d\n", &core_parallelism);
+        else if (rlen > 12 && (! strncmp(line, "PACKAGE_SIZE", 12)))
+            sscanf(line, "PACKAGE_SIZE %lu\n", &package_size);
+        else if (rlen > 8 && (! strncmp(line, "DIE_SIZE", 8)))
+            sscanf(line, "DIE_SIZE %lu\n", &die_size);
+        else if (rlen > 10 && (! strncmp(line, "PLANE_SIZE", 10)))
+            sscanf(line, "PLANE_SIZE %lu\n", &plane_size);
+        else if (rlen > 10 && (! strncmp(line, "BLOCK_SIZE", 10)))
+            sscanf(line, "BLOCK_SIZE %lu\n", &block_size);
+        else if (rlen > 9 && (! strncmp(line, "PAGE_SIZE", 9)))
+            sscanf(line, "PAGE_SIZE %lu\n", &page_size);
+        else if (rlen > 16 && (! strncmp(line, "PAGE_ENABLE_DATA", 16))) {
+            int tmp;
+            sscanf(line, "PAGE_ENABLE_DATA %d\n", &tmp);
+            flashsim_enable_data = (tmp == 1);
+        }
+    }
+
+    if (page_size <= 0)
+        error("Invalid FlashSim page size", 3);
+    flashsim_page_size = page_size;
+
+    if (core_parallelism <= 0)
+        error("Invalid core SSD number of packages", 3);
+    printf("  Core parallelism: %d\n", core_parallelism);
+
+    core_capacity_bytes = core_parallelism * package_size * die_size
+                          * plane_size * block_size * page_size;
+    core_capacity_bytes = (uint64_t) (core_capacity_bytes
+                                      * 0.5);  /** Only use 40%. */
+    if (core_capacity_bytes <= 0)
+        error("Invalid cache SSD capacity", 3);
+    printf("  Core 50%% capacity: %ld bytes\n", core_capacity_bytes);
+
+    printf("  FlashSim page size: %ld bytes\n", flashsim_page_size);
+    printf("  FlashSim enable data: %s\n", flashsim_enable_data ? "true"
+                                                                : "false");
+}
+
+
+/**
  * Main entrance for a round of testing.
  */
 int
@@ -212,26 +352,55 @@ main(int argc, char *argv[])
     struct ocf_stats_requests stats_reqs;
     struct ocf_stats_blocks stats_blocks;
     struct ocf_stats_errors stats_errors;
-    int intensity, ret;
 
-    if (argc != 6) {
-      fprintf(stderr, "Usage: ./sim cache_sock cache_parallelism "
-                      "core_sock core_parallelism intensity\n");
-      exit(1);
+    int intensity, ret;
+    enum bench_cache_mode cache_mode;
+
+    printf("\nExperiment setup parameters:\n\n");
+
+    /** FlashSim sockets. */
+    cache_sock_name = "cache-sock";
+    core_sock_name  = "core-sock";
+
+    /** Get cache mode and intensity for this round of experiment. */
+    if (argc != 3) {
+        fprintf(stderr, "Usage: ./bench mf|wa|pt intensity\n");
+        exit(1);
     }
 
-    cache_sock_name = argv[1];
-    cache_parallelism = (int) strtol(argv[2], NULL, 10);
-    core_sock_name  = argv[3];
-    core_parallelism = (int) strtol(argv[4], NULL, 10);
-    intensity = (int) strtol(argv[5], NULL, 10);
+    if (! strncmp(argv[1], "mf", 2))
+        cache_mode = BENCH_CACHE_MODE_MF;
+    else if (! strncmp(argv[1], "wa", 2))
+        cache_mode = BENCH_CACHE_MODE_WA;
+    else if (! strncmp(argv[1], "pt", 2))
+        cache_mode = BENCH_CACHE_MODE_PT;
+    else {
+        fprintf(stderr, "Usage: ./bench mf|wa|pt intensity\n");
+        exit(1);
+    }
+    printf("  Using cache mode: %s\n", argv[1]);
 
+    intensity = (int) strtol(argv[2], NULL, 10);
+    printf("  Intensity: %d 4KiB-Reqs/s\n", intensity);
+
+    /** Get CPU frequency for timing purpose. */
+    _read_cpu_frequency();
+
+    /** Read device config files. */
+    _read_cache_device_config();
+    _read_core_device_config();
+
+    ENV_BUG_ON(flashsim_page_size != PAGE_SIZE);
+
+    /** Random seed. */
     srand(time(NULL));
 
-    gettimeofday(&boot_time, NULL);
+    /** Logging locations. */
+    fdevice  = fopen("logs/log-device.txt" , "w+");
+    fmonitor = fopen("logs/log-monitor.txt", "w+");
 
-    fdevice = fopen("logs/device-log.txt", "w+");
-    fmonitor = fopen("logs/monitor-log.txt", "w+");
+    /** Record RDTSC at boot time. */
+    boot_cpu_cycle = rdtsc();
 
     /** 1. Initialize OCF context. */
     ret = simfs_ctx_init(&ctx);
@@ -248,7 +417,7 @@ main(int argc, char *argv[])
         error("Unable to register core volume type", ret);
 
     /** 3. Setup cache object. */
-    ret = cache_obj_setup(ctx, &cache, USING_MF_MODE);
+    ret = cache_obj_setup(ctx, &cache, cache_mode);
     if (ret)
         error("Unable to initialize cache", ret);
 
@@ -258,7 +427,7 @@ main(int argc, char *argv[])
         error("Unable to initialize core", ret);
 
     /** 5. Init and start the monitor. */
-    if (USING_MF_MODE) {
+    if (cache_mode == BENCH_CACHE_MODE_MF) {
         ret = ocf_mngt_mf_monitor_init(core);
         if (ret)
             error("Unable to start monitor thread", ret);
@@ -271,14 +440,14 @@ main(int argc, char *argv[])
       error("Error when performing workload", ret);
 
     /** 7. Stop the multi-factor monitor. */
-    if (USING_MF_MODE)
+    if (cache_mode == BENCH_CACHE_MODE_MF)
         ocf_mngt_mf_monitor_stop();
 
     /** 8. Collect & show statistics. */
     ocf_stats_collect_core(core, &stats_usage, &stats_reqs,
                            &stats_blocks, &stats_errors);
-    print_statistics(&stats_usage, &stats_reqs,
-                     &stats_blocks, &stats_errors);
+    _print_statistics(&stats_usage, &stats_reqs,
+                      &stats_blocks, &stats_errors);
 
     /** 9. Stop and detach core from cache. */
     ret = core_obj_stop(core);

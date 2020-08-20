@@ -19,9 +19,6 @@
 #include "../../../src/engine/engine_mf.h"
 
 
-extern const bool FLASHSIM_ENABLE_DATA;
-
-
 // Exposed for device logging.
 double base_time_ms = 0.0;
 
@@ -29,14 +26,14 @@ double base_time_ms = 0.0;
 /**
  * Callback functions to be called when operation completes.
  */
-static void
-write_cmpl_callback(struct ocf_io *io, int error)
-{
-    if (error != 0)
-        DEBUG("WR COMPLETE: error = %d", error);
+// static void
+// write_cmpl_callback(struct ocf_io *io, int error)
+// {
+//     if (error != 0)
+//         DEBUG("WR COMPLETE: error = %d", error);
 
-    ocf_io_put(io);
-}
+//     ocf_io_put(io);
+// }
 
 static void
 read_cmpl_callback(struct ocf_io *io, int error)
@@ -112,7 +109,7 @@ _get_core_throughput(double begin_time_ms, double end_time_ms)
 static int
 which_page_workload_small()
 {
-    const int cache_capacity = CACHE_VOL_SIZE / PAGE_SIZE;
+    const int cache_capacity = cache_capacity_bytes / PAGE_SIZE;
     const int workload_size = (int) (0.1 * cache_capacity);
 
     return rand() % workload_size;
@@ -121,7 +118,7 @@ which_page_workload_small()
 // static int
 // which_page_workload_1st()
 // {
-//     const int cache_capacity = CACHE_VOL_SIZE / PAGE_SIZE;
+//     const int cache_capacity = cache_capacity_bytes / PAGE_SIZE;
 //     const int workload_size = (int) (1.25 * cache_capacity);
 
 //     if (rand() % 100 < 95)
@@ -133,8 +130,8 @@ which_page_workload_small()
 // static int
 // which_page_workload_2nd()
 // {
-//     const int core_capacity = CORE_VOL_SIZE / PAGE_SIZE;
-//     const int cache_capacity = CACHE_VOL_SIZE / PAGE_SIZE;
+//     const int core_capacity = core_capacity_bytes / PAGE_SIZE;
+//     const int cache_capacity = cache_capacity_bytes / PAGE_SIZE;
 //     const int workload_size = (int) (1.25 * cache_capacity);
 
 //     if (rand() % 100 < 95)
@@ -148,16 +145,29 @@ int
 perform_workload_tp_hack(ocf_core_t core, int intensity,
                          int smashing_secs, int display_secs)
 {
-    int total_pages = CORE_VOL_SIZE / PAGE_SIZE;
+    // int total_pages = core_capacity_bytes / PAGE_SIZE;
     int i, ret, num_reqs = 0;
     double cur_time_ms, log_interval_ms = 0.0;
 
     /** Must have ENABLE_DATA == false when doing this benchmarking. */
-    if (FLASHSIM_ENABLE_DATA) {
+    if (flashsim_enable_data) {
         fprintf(stderr, "Recommend having ENABLE_DATA option off "
                         "when benchmarking.\n");
         return -1;
     }
+
+    /** Intensity must be a multiple of 10. */
+    if (intensity % 10 != 0) {
+        fprintf(stderr, "Intensity must be a multiple of 10.\n");
+        return -1;
+    }
+
+    /**
+     * We will issue 10 requests in a row every time the benchmarking code
+     * wakes up. This makes the actual sleep time between wake ups more
+     * reasonable.
+     */
+    intensity = (int) (intensity / 10);
 
     simfs_data_t *data = simfs_data_alloc(1);
 
@@ -166,30 +176,30 @@ perform_workload_tp_hack(ocf_core_t core, int intensity,
      * experiment code. If we don't do that, actual intensity will be
      * much lower than the value we set as intensity.
      */
-    double delta_ms = (1000.0 / (double) intensity) * 0.98 - 0.11;
+    double delta_ms = (1000.0 / (double) intensity) * 0.94 - 0.08;
 
-    if (data == NULL)
-        return -ENOMEM;
+    // if (data == NULL)
+    //     return -ENOMEM;
 
-    for (i = 0; i < PAGE_SIZE; ++i)
-        *((char *) data->ptr + i) = (rand() % 26) + 97;
+    // for (i = 0; i < PAGE_SIZE; ++i)
+    //     *((char *) data->ptr + i) = (rand() % 26) + 97;
 
-    printf("\nFilling devices with random data...\n\n");
+    // printf("\nFilling devices with random data...\n");
 
-    /** Fill every page so that we can read any of them. */
-    for (i = 0; i < total_pages; ++i) {
-        int dir = OCF_WRITE;
-        uint32_t size = PAGE_SIZE;
-        uint64_t addr = i * PAGE_SIZE;
+    // /** Fill every page so that we can read any of them. */
+    // for (i = 0; i < total_pages; ++i) {
+    //     int dir = OCF_WRITE;
+    //     uint32_t size = PAGE_SIZE;
+    //     uint64_t addr = i * PAGE_SIZE;
 
-        ret = submit_io(core, data, addr, size, dir, write_cmpl_callback);
-        if (ret)
-            return ret;
+    //     ret = submit_io(core, data, addr, size, dir, write_cmpl_callback);
+    //     if (ret)
+    //         return ret;
 
-        usleep(3000);
-    }
+    //     usleep(3000);
+    // }
 
-    printf("\nExperiment starts... Progress:\n\n");
+    printf("\nStart experiment... Progress:\n\n");
 
     /**
      * Loop and perform random reads, one page each, following the
@@ -203,10 +213,6 @@ perform_workload_tp_hack(ocf_core_t core, int intensity,
 
     do {
         double fluctuation = 0.75 + ((double) rand() / RAND_MAX) * 0.5;
-
-        int dir = OCF_READ;
-        uint32_t size = PAGE_SIZE;
-        uint64_t addr = which_page_workload_small() * PAGE_SIZE;
 
         double new_time_ms = get_cur_time_ms();
         log_interval_ms += new_time_ms - cur_time_ms;
@@ -229,11 +235,17 @@ perform_workload_tp_hack(ocf_core_t core, int intensity,
             log_interval_ms = 0.0;
         }
 
-        ret = submit_io(core, data, addr, size, dir, read_cmpl_callback);
-        if (ret)
-            return ret;
+        for (i = 0; i < 10; ++i) {  /** 10 requests in a row. */
+            int dir = OCF_READ;
+            uint32_t size = PAGE_SIZE;
+            uint64_t addr = which_page_workload_small() * PAGE_SIZE;
 
-        num_reqs++;
+            ret = submit_io(core, data, addr, size, dir, read_cmpl_callback);
+            if (ret)
+                return ret;
+
+            num_reqs++;
+        }
 
         usleep((int) (delta_ms * fluctuation * 1000));
     } while (cur_time_ms < base_time_ms + 1000.0 * smashing_secs);
@@ -256,6 +268,10 @@ perform_workload_tp_hack(ocf_core_t core, int intensity,
 
         usleep(500 * 1000);
     } while (cur_time_ms < base_time_ms + 1000.0 * display_secs);
+
+    /** Force stop. */
+    cache_vol_force_stop();
+    core_vol_force_stop();
 
     simfs_data_free(data);
 

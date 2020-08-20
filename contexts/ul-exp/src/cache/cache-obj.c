@@ -57,8 +57,6 @@ cache_stop_callback(ocf_cache_t cache, void *callback_states,
 
 /*========== Device log implementation BEGIN ==========*/
 
-extern const int cache_parallelism;
-
 /**
  * Device circular log for throughput measurement. It records the
  * latest IOs through this device.
@@ -107,9 +105,11 @@ cache_log_push_entry(int pkg, double start_time_ms, double finish_time_ms,
     if (cache_log_head[pkg] < 0)
         cache_log_head[pkg] = 0;
 
-    fprintf(fdevice, "cache req: %.3lf - %.3lf of %u\n",
-            start_time_ms - base_time_ms,
-            finish_time_ms - base_time_ms, bytes);
+    if (DEVICE_LOG_ENABLE) {
+        fprintf(fdevice, "cache req: %.3lf - %.3lf of %u\n",
+                start_time_ms - base_time_ms,
+                finish_time_ms - base_time_ms, bytes);
+    }
 
     env_rwlock_write_unlock(&cache_log_lock[pkg]);
 }
@@ -155,7 +155,8 @@ cache_log_query_throughput(double begin_time_ms, double end_time_ms)
  * Should be called BEFORE `core_setup`.
  */
 int
-cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache, bool using_mf_mode)
+cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache,
+                enum bench_cache_mode cache_mode)
 {
     struct ocf_mngt_cache_config cache_cfg = { .name = "cache" };
     struct ocf_mngt_cache_device_config device_cfg;
@@ -178,8 +179,12 @@ cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache, bool using_mf_mode)
      */
     ocf_mngt_cache_config_set_default(&cache_cfg);
     cache_cfg.metadata_volatile = true;
-    cache_cfg.cache_mode = using_mf_mode ? ocf_cache_mode_mf
-                                         : ocf_cache_mode_wa;
+    if (cache_mode == BENCH_CACHE_MODE_MF)
+        cache_cfg.cache_mode = ocf_cache_mode_mf;
+    else if (cache_mode == BENCH_CACHE_MODE_WA)
+        cache_cfg.cache_mode = ocf_cache_mode_wa;
+    else
+        cache_cfg.cache_mode=  ocf_cache_mode_pt;
 
     /**
      * Set cache device configuration to default, and assign volume type

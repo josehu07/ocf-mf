@@ -7,8 +7,8 @@
 #
 
 
-if [[ $# -ne 2 ]]; then
-    echo "Usage: ./run-flashsim.sh SOCK_NAME CONF_PATH"
+if [[ $# -ne 1 ]]; then
+    echo "Usage: ./run-flashsim.sh cache|core"
     exit 1
 fi
 
@@ -21,4 +21,11 @@ if [[ ! -f ${FLASHSIM_EXEC} ]]; then
 fi
 
 
-${FLASHSIM_EXEC} $1 $2
+if [[ $1 == "cache" ]]; then
+    ${FLASHSIM_EXEC} cache-sock cache-ssd.conf
+elif [[ $1 == "core" ]]; then
+    ${FLASHSIM_EXEC} core-sock core-ssd.conf
+else
+    echo "Usage: ./run-flashsim.sh cache|core"
+    exit 1
+fi
