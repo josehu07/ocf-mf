@@ -14,12 +14,16 @@ Folder structure:
  |- contexts/
  |   |- ul-exp/     # Context code wrapping OCF, for user-level benchmarking    
  |   |   |- src/
- |   |   |   |- cache/      # Cache volume FlashSim driver
- |   |   |   |- core/       # Core volume FlashSim driver
+ |   |   |   |- cache/      # Cache volume FlashSim driver, queue, and log
+ |   |   |   |- core/       # Core volume FlashSim driver, queue, and log
  |   |   |   |- simfs/      # Dummy application context
  |   |   |   |- workload/   # Benchmarking logics should go here
- |   |   |   main.c
+ |   |   |   |- main.c
+ |   |   |   |- ...
  |   |   |- Makefile
+ |   |   |- cache-ssd.conf  # Cache SSD configuration used in experiments
+ |   |   |- core-ssd.conf   # Core SSD configuration used in experiments
+ |   |   |- run-flashsim.sh
 
 # These are the OCF library - I added cache mode `mf` into the engine
  |- env/

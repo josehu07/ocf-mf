@@ -53,6 +53,7 @@ for filename in resfiles:
     # print(core_tps)
     # print(workload_change_time)
 
+
     fig = plt.figure(filename, constrained_layout=True)
     gs = fig.add_gridspec(5, 1)
 
@@ -74,9 +75,9 @@ for filename in resfiles:
     ax3.plot(times, [tp1+tp2 for tp1, tp2 in zip(cache_tps, core_tps)], color='g', label="Total")
     ax3.plot(times, cache_tps, color='c', label="Cache")
     ax3.plot(times, core_tps, color='b', label="Core")
-    ax3.set_ylim(-1000., 20000.)
+    ax3.set_ylim(-1., 100.)
     ax3.set_title("Throughput")
-    ax3.set_ylabel("(MB/s)")
+    ax3.set_ylabel("(MiB/s)")
     ax3.legend(loc='center left')
 
     ax3.set_xlabel("Time (ms)")

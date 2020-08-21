@@ -46,36 +46,6 @@ read_cmpl_callback(struct ocf_io *io, int error)
 
 
 /**
- * Wrapper function for I/O submission.
- */
-static int
-submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
-          uint32_t len, int dir, ocf_end_io_t callback_func)
-{
-    ocf_cache_t cache = ocf_core_get_cache(core);
-    cache_obj_priv_t *cache_obj_priv = ocf_cache_get_priv(cache);
-    struct ocf_io* io;
-
-    /** Allocate new I/O in queue. */
-    io = ocf_core_new_io(core, cache_obj_priv->io_queue, addr,
-                         len, dir, 0, 0);
-    if (io == NULL)
-        return -ENOMEM;
-
-    /** Assign data to I/O. */
-    ocf_io_set_data(io, simfs_data, 0);
-
-    /** Assign completion callback function. */
-    ocf_io_set_cmpl(io, NULL, NULL, callback_func);
-
-    /** Submit this I/O. */
-    ocf_core_submit_io(io);
-
-    return 0;
-}
-
-
-/**
  * For result plotting purpose.
  */
 static inline double
@@ -104,7 +74,7 @@ _get_core_throughput(double begin_time_ms, double end_time_ms)
 
 
 /**
- * Supports multi-factor caching algorithm.
+ * Define a workload - choosing a page.
  */
 static int
 which_page_workload_small()
@@ -141,14 +111,60 @@ which_page_workload_small()
 //                + (rand() % (workload_size - cache_capacity));
 // }
 
-int
-perform_workload_tp_hack(ocf_core_t core, int intensity,
-                         int smashing_secs, int display_secs)
-{
-    // int total_pages = core_capacity_bytes / PAGE_SIZE;
-    int i, ret, num_reqs = 0;
-    double cur_time_ms, log_interval_ms = 0.0;
 
+/**
+ * Wrapper functions for I/O submission.
+ */
+static int
+submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
+          uint32_t len, int dir, ocf_end_io_t callback_func)
+{
+    ocf_cache_t cache = ocf_core_get_cache(core);
+    cache_obj_priv_t *cache_obj_priv = ocf_cache_get_priv(cache);
+    struct ocf_io* io;
+
+    /** Allocate new I/O in queue. */
+    io = ocf_core_new_io(core, cache_obj_priv->io_queue, addr,
+                         len, dir, 0, 0);
+    if (io == NULL)
+        return -ENOMEM;
+
+    /** Assign data to I/O. */
+    ocf_io_set_data(io, simfs_data, 0);
+
+    /** Assign completion callback function. */
+    ocf_io_set_cmpl(io, NULL, NULL, callback_func);
+
+    /** Submit this I/O. */
+    ocf_core_submit_io(io);
+
+    return 0;
+}
+
+static int
+submit_10_ios_in_a_row(ocf_core_t core, simfs_data_t *simfs_data,
+                       ocf_end_io_t callback_func)
+{
+    int i, ret;
+
+    for (i = 0; i < 10; ++i) {
+        int dir = OCF_READ;
+        uint32_t size = PAGE_SIZE;
+        uint64_t addr = which_page_workload_small() * PAGE_SIZE;
+
+        ret = submit_io(core, simfs_data, addr, size, dir, callback_func);
+        if (ret)
+            return ret;
+    }
+
+    return 0;
+}
+
+
+int
+perform_workload_tp_hack(ocf_core_t core, enum bench_cache_mode cache_mode,
+                         int intensity)
+{
     /** Must have ENABLE_DATA == false when doing this benchmarking. */
     if (flashsim_enable_data) {
         fprintf(stderr, "Recommend having ENABLE_DATA option off "
@@ -162,58 +178,112 @@ perform_workload_tp_hack(ocf_core_t core, int intensity,
         return -1;
     }
 
+    simfs_data_t *data = simfs_data_alloc(1);
+    int ret;
+
     /**
      * We will issue 10 requests in a row every time the benchmarking code
      * wakes up. This makes the actual sleep time between wake ups more
      * reasonable.
      */
-    intensity = (int) (intensity / 10);
-
-    simfs_data_t *data = simfs_data_alloc(1);
-
-    /**
-     * ATTENTION: we are here compensating for extra overheads in the 
-     * experiment code. If we don't do that, actual intensity will be
-     * much lower than the value we set as intensity.
-     */
-    double delta_ms = (1000.0 / (double) intensity) * 0.94 - 0.08;
-
-    // if (data == NULL)
-    //     return -ENOMEM;
-
-    // for (i = 0; i < PAGE_SIZE; ++i)
-    //     *((char *) data->ptr + i) = (rand() % 26) + 97;
-
-    // printf("\nFilling devices with random data...\n");
-
-    // /** Fill every page so that we can read any of them. */
-    // for (i = 0; i < total_pages; ++i) {
-    //     int dir = OCF_WRITE;
-    //     uint32_t size = PAGE_SIZE;
-    //     uint64_t addr = i * PAGE_SIZE;
-
-    //     ret = submit_io(core, data, addr, size, dir, write_cmpl_callback);
-    //     if (ret)
-    //         return ret;
-
-    //     usleep(3000);
-    // }
-
-    printf("\nStart experiment... Progress:\n\n");
-
-    /**
-     * Loop and perform random reads, one page each, following the
-     * defined workload pattern.
-     */
-    // printf("\n Workload #1:\n\n");
+    intensity /= 10;
+    double delta_ms = (1000.0 / (double) intensity);
 
     base_time_ms = get_cur_time_ms();
-    cur_time_ms = base_time_ms;
-    log_interval_ms = 0.0;
+    double cur_time_ms = base_time_ms;
+    double log_interval_ms = 0.0;
+
+    int num_reqs = 0;
+
+    /**
+     * Stage 1 -
+     *   The first 30 secs are totally unstable.
+     */
+    printf("\nBegin stabilizing stage... (0 - 30 secs)\n\n");
 
     do {
-        double fluctuation = 0.75 + ((double) rand() / RAND_MAX) * 0.5;
+        double new_time_ms = get_cur_time_ms();
+        log_interval_ms += new_time_ms - cur_time_ms;
+        cur_time_ms = new_time_ms;
 
+        if (log_interval_ms > 500.0) {
+            printf("  *** #%d @ %.3lf ms: "
+                   "miss_ratio = %.5lf, "
+                   "load_admit = %.3lf, "
+                   "cache_tp = %.3lf, "
+                   "core_tp = %.3lf\n",
+                   num_reqs, cur_time_ms - base_time_ms,
+                   _get_miss_ratio(core),
+                   _get_load_admit(),
+                   _get_cache_throughput(cur_time_ms - log_interval_ms,
+                                         cur_time_ms),
+                   _get_core_throughput(cur_time_ms - log_interval_ms,
+                                        cur_time_ms));
+
+            log_interval_ms = 0.0;
+        }
+
+        ret = submit_10_ios_in_a_row(core, data, read_cmpl_callback);
+        if (ret)
+            return ret;
+
+        usleep((int) (delta_ms * 1000));
+    } while (cur_time_ms < base_time_ms + 1000.0 * 30);
+
+    /**
+     * Stage 2 -
+     *   Measure delta overhead in 30 - 60 secs region. Then, adjust delta
+     *   to be accurate.
+     */
+    printf("\nMeasuring delta overhead... (30 - 60 secs)\n\n");
+
+    double avg_submit_elapsed_ms = 0.0;
+    int count = 0;
+
+    do {
+        double submit_start_ms = get_cur_time_ms();
+
+        double new_time_ms = get_cur_time_ms();
+        log_interval_ms += new_time_ms - cur_time_ms;
+        cur_time_ms = new_time_ms;
+
+        if (log_interval_ms > 500.0) {
+            printf("  ??? #%d @ %.3lf ms: "
+                   "miss_ratio = %.5lf, "
+                   "load_admit = %.3lf, "
+                   "cache_tp = %.3lf, "
+                   "core_tp = %.3lf\n",
+                   num_reqs, cur_time_ms - base_time_ms,
+                   _get_miss_ratio(core),
+                   _get_load_admit(),
+                   _get_cache_throughput(cur_time_ms - log_interval_ms,
+                                         cur_time_ms),
+                   _get_core_throughput(cur_time_ms - log_interval_ms,
+                                        cur_time_ms));
+
+            log_interval_ms = 0.0;
+        }
+
+        ret = submit_10_ios_in_a_row(core, data, read_cmpl_callback);
+        if (ret)
+            return ret;
+
+        avg_submit_elapsed_ms += get_cur_time_ms() - submit_start_ms;
+        count++;
+
+        usleep((int) (delta_ms * 1000));
+    } while (cur_time_ms < base_time_ms + 1000.0 * 60);
+
+    avg_submit_elapsed_ms /= count;
+    delta_ms -= avg_submit_elapsed_ms;
+
+    /**
+     * Stage 3 -
+     *   Perform the accurate experiment for 100 secs.
+     */
+    printf("\nStart the experiment... (60 - 160 secs)\n\n");
+
+    do {
         double new_time_ms = get_cur_time_ms();
         log_interval_ms += new_time_ms - cur_time_ms;
         cur_time_ms = new_time_ms;
@@ -235,39 +305,47 @@ perform_workload_tp_hack(ocf_core_t core, int intensity,
             log_interval_ms = 0.0;
         }
 
-        for (i = 0; i < 10; ++i) {  /** 10 requests in a row. */
-            int dir = OCF_READ;
-            uint32_t size = PAGE_SIZE;
-            uint64_t addr = which_page_workload_small() * PAGE_SIZE;
+        ret = submit_10_ios_in_a_row(core, data, read_cmpl_callback);
+        if (ret)
+            return ret;
 
-            ret = submit_io(core, data, addr, size, dir, read_cmpl_callback);
-            if (ret)
-                return ret;
+        num_reqs += 10;
 
-            num_reqs++;
-        }
+        usleep((int) (delta_ms * 1000));
+    } while (cur_time_ms < base_time_ms + 1000.0 * 160);
 
-        usleep((int) (delta_ms * fluctuation * 1000));
-    } while (cur_time_ms < base_time_ms + 1000.0 * smashing_secs);
+    /**
+     * Stage 4 -
+     *   Wait for some extra secs.
+     */
+    printf("\nWait for extra secs... (160 - 180 secs)\n\n");
 
     do {
-        cur_time_ms = get_cur_time_ms();
+        double new_time_ms = get_cur_time_ms();
+        log_interval_ms += new_time_ms - cur_time_ms;
+        cur_time_ms = new_time_ms;
 
-        printf("  ... #%d @ %.3lf ms: "
-               "miss_ratio = %.5lf, "
-               "load_admit = %.3lf, "
-               "cache_tp = %.3lf, "
-               "core_tp = %.3lf\n",
-               num_reqs, cur_time_ms - base_time_ms,
-               _get_miss_ratio(core),
-               _get_load_admit(),
-               _get_cache_throughput(cur_time_ms - 500.0,
-                                     cur_time_ms),
-               _get_core_throughput(cur_time_ms - 500.0,
-                                    cur_time_ms));
+        if (log_interval_ms > 500.0) {
+            printf("  ~~~ #%d @ %.3lf ms: "
+                   "miss_ratio = %.5lf, "
+                   "load_admit = %.3lf, "
+                   "cache_tp = %.3lf, "
+                   "core_tp = %.3lf\n",
+                   num_reqs, cur_time_ms - base_time_ms,
+                   _get_miss_ratio(core),
+                   _get_load_admit(),
+                   _get_cache_throughput(cur_time_ms - log_interval_ms,
+                                         cur_time_ms),
+                   _get_core_throughput(cur_time_ms - log_interval_ms,
+                                        cur_time_ms));
 
-        usleep(500 * 1000);
-    } while (cur_time_ms < base_time_ms + 1000.0 * display_secs);
+            log_interval_ms = 0.0;
+        }
+
+        usleep((int) (delta_ms * 1000));
+    } while (cur_time_ms < base_time_ms + 1000.0 * 180);
+
+    fflush(stdout);
 
     /** Force stop. */
     cache_vol_force_stop();

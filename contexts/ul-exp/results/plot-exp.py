@@ -12,16 +12,16 @@ for filename in os.listdir("./"):
         resfiles.append(filename)
 
 
-avg_load_admits = {'mf': {}, 'wa': {}}
-avg_cache_tps = {'mf': {}, 'wa': {}}
-avg_core_tps = {'mf': {}, 'wa': {}}
-avg_total_tps = {'mf': {}, 'wa': {}}
+avg_load_admits = {'mf': {}, 'wa': {}, 'pt': {}}
+avg_cache_tps = {'mf': {}, 'wa': {}, 'pt': {}}
+avg_core_tps = {'mf': {}, 'wa': {}, 'pt': {}}
+avg_total_tps = {'mf': {}, 'wa': {}, 'pt': {}}
 
 for filename in resfiles:
     intensity = int(filename[filename.find("-")+1:filename.rfind("-")])
     mode = filename[filename.rfind("-")+1:filename.find(".txt")]
 
-    # num_reqs = []
+    num_reqs = []
     times = []
     # miss_ratios = []
     load_admits = []
@@ -33,14 +33,14 @@ for filename in resfiles:
             line = line.strip()
 
             if line.startswith("..."):
-                # num_req = int(line[line.find("#")+1:line.find(" @")])
+                num_req = int(line[line.find("#")+1:line.find(" @")])
                 time = float(line[line.find("@ ")+2:line.find(" ms")])
                 # miss_ratio = float(line[line.find("miss_ratio = ")+13:line.find(", load_admit")])
                 load_admit = float(line[line.find("load_admit = ")+13:line.find(", cache")])
                 cache_tp = float(line[line.find("cache_tp = ")+11:line.find(", core")])
                 core_tp = float(line[line.find("core_tp = ")+10:])
 
-                # num_reqs.append(num_req)
+                num_reqs.append(num_req)
                 times.append(time)
                 # miss_ratios.append(miss_ratio)
                 load_admits.append(load_admit)
@@ -50,12 +50,22 @@ for filename in resfiles:
     idx_begin, idx_end = None, None
 
     for i in range(len(times)):
-        if idx_begin is None and times[i] > 50000:
+        if idx_begin is None and times[i] > (60 * 1000):
             idx_begin = i
-        if idx_end is None and times[i] >= 150000:
+        if idx_end is None and times[i] >= (160 * 1000):
             idx_end = i
 
     # print(idx_begin, idx_end, len(times))
+
+    # Amplification ratio: actual number of requests may be smaller than what it
+    # should be given the intensity number, because there is overhead in benchmarking
+    # code loop. Doing usleep of delta (= 1 / intensity) will actually give an
+    # intensity smaller than what we set.
+    amp_ratio = float(intensity * (160 - 60)) / float(num_reqs[-1])
+
+    # print(mode, amp_ratio)
+
+    intensity /= 1000
 
     avg_load_admit = 0
     avg_cache_tp = 0
@@ -63,8 +73,8 @@ for filename in resfiles:
 
     for i in range(idx_begin, idx_end):
         avg_load_admit += load_admits[i]
-        avg_cache_tp += cache_tps[i]
-        avg_core_tp += core_tps[i]
+        avg_cache_tp += cache_tps[i] * amp_ratio
+        avg_core_tp += core_tps[i] * amp_ratio
 
     avg_load_admits[mode][intensity] = avg_load_admit / (idx_end - idx_begin)
     avg_cache_tps[mode][intensity] = avg_cache_tp / (idx_end - idx_begin)
@@ -87,34 +97,37 @@ fig = plt.figure(filename, constrained_layout=True)
 gs = fig.add_gridspec(3, 1)
 
 ax1 = fig.add_subplot(gs[0,:])
-ax1.bar([v-40 for v in avg_cache_tps['wa'].keys()], avg_cache_tps['wa'].values(), width=80, color="lightsteelblue", edgecolor="white", label="WA")
-ax1.bar([v+40 for v in avg_cache_tps['mf'].keys()], avg_cache_tps['mf'].values(), width=80, color="blue",           edgecolor="white", label="MF")
+ax1.bar([v-0.25 for v in avg_cache_tps['pt'].keys()], avg_cache_tps['pt'].values(), width=0.25, color="lightsteelblue", edgecolor="white", label="PT")
+ax1.bar([v      for v in avg_cache_tps['wa'].keys()], avg_cache_tps['wa'].values(), width=0.25, color="blue",           edgecolor="white", label="WA")
+ax1.bar([v+0.25 for v in avg_cache_tps['mf'].keys()], avg_cache_tps['mf'].values(), width=0.25, color="midnightblue",   edgecolor="white", label="MF")
 ax1.set_title("Cache Throughput")
-ax1.set_xticks(range(2000, 4200, 200))
-ax1.set_ylim((0, 16000))
-ax1.set_ylabel("(MB/s)")
+ax1.set_xticks(range(10, 25))
+ax1.set_ylim((0, 100.))
+ax1.set_ylabel("(MiB/s)")
 ax1.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
 ax2 = fig.add_subplot(gs[1,:])
-ax2.bar([v-40 for v in avg_core_tps['wa'].keys()], avg_core_tps['wa'].values(), width=80, color="bisque",     edgecolor="white", label="WA")
-ax2.bar([v+40 for v in avg_core_tps['mf'].keys()], avg_core_tps['mf'].values(), width=80, color="darkorange", edgecolor="white", label="MF")
+ax2.bar([v-0.25 for v in avg_core_tps['pt'].keys()], avg_core_tps['pt'].values(), width=0.25, color="bisque",      edgecolor="white", label="PT")
+ax2.bar([v      for v in avg_core_tps['wa'].keys()], avg_core_tps['wa'].values(), width=0.25, color="darkorange",  edgecolor="white", label="WA")
+ax2.bar([v+0.25 for v in avg_core_tps['mf'].keys()], avg_core_tps['mf'].values(), width=0.25, color="saddlebrown", edgecolor="white", label="MF")
 ax2.set_title("Core Throughput")
-ax2.set_xticks(range(2000, 4200, 200))
-ax2.set_ylim((0, 16000))
-ax2.set_ylabel("(MB/s)")
+ax2.set_xticks(range(10, 25))
+ax2.set_ylim((0, 100.))
+ax2.set_ylabel("(MiB/s)")
 ax2.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
 ax3 = fig.add_subplot(gs[2:,:])
-ax3.bar([v-40 for v in avg_total_tps['wa'].keys()], avg_total_tps['wa'].values(), width=80, color="lightgreen", edgecolor="white", label="WA")
-ax3.bar([v+40 for v in avg_total_tps['mf'].keys()], avg_total_tps['mf'].values(), width=80, color="green",      edgecolor="white", label="MF")
+ax3.bar([v-0.25 for v in avg_total_tps['pt'].keys()], avg_total_tps['pt'].values(), width=0.25, color="lightgreen", edgecolor="white", label="PT")
+ax3.bar([v      for v in avg_total_tps['wa'].keys()], avg_total_tps['wa'].values(), width=0.25, color="lime",       edgecolor="white", label="WA")
+ax3.bar([v+0.25 for v in avg_total_tps['mf'].keys()], avg_total_tps['mf'].values(), width=0.25, color="darkgreen",  edgecolor="white", label="MF")
 ax3.set_title("Total Throughput")
-ax3.set_xticks(range(2000, 4200, 200))
-ax3.set_ylim((0, 16000))
-ax3.set_ylabel("(MB/s)")
+ax3.set_xticks(range(10, 25))
+ax3.set_ylim((0, 100.))
+ax3.set_ylabel("(MiB/s)")
 ax3.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
-ax3.set_xlabel("Intensity (#4K-Reqs/s)")
+ax3.set_xlabel("Intensity (x1000 4K-Reqs/s)")
 
 fig.suptitle("Throughput on Different Intensities")
 
-plt.savefig("exp-intensity.png", dpi=200)
+plt.savefig("exp-intensity.png", dpi=120)

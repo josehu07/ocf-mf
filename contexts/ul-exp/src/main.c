@@ -435,7 +435,7 @@ main(int argc, char *argv[])
 
     /** 6. Perform workload. */
     // ret = perform_workload_fuzzy(core, 36000);
-    ret = perform_workload_tp_hack(core, intensity, 150, 180);
+    ret = perform_workload_tp_hack(core, cache_mode, intensity);
     if (ret)
       error("Error when performing workload", ret);
 
