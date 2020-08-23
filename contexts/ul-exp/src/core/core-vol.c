@@ -59,19 +59,24 @@ static const int FLASHSIM_DIR_WRITE = 1;
 
 
 /** This lock protects the FlashSim socket file. */
-static env_mutex core_device_lock;
+static env_mutex core_device_sock_lock;
+
+/** This RW lock ensures requests sequentiality. */
+static env_rwlock core_sequentiality_lock;
 
 
 /**
  * Routines to read from or write to the storage device.
  */
 static int
-_submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
-                 double start_time_ms)
+_submit_write_io(struct ocf_io *io, int sock_fd, double start_time_ms)
 {
     struct req_header header;
     int rbytes, wbytes;
     uint64_t time_used_us;
+
+    core_vol_io_priv_t *io_priv = ocf_io_get_priv(io);
+    simfs_data_t *data = io_priv->data;
 
     /** Request header. */
     header.direction = FLASHSIM_DIR_WRITE;
@@ -80,21 +85,22 @@ _submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     header.start_time_us = (uint64_t) (1000 * start_time_ms);
 
     /** Critical section: ensuring the three messages are always in order. */
-    env_mutex_lock(&core_device_lock);
+    env_mutex_lock(&core_device_sock_lock);
 
     wbytes = write(sock_fd, &header, REQ_HEADER_LENGTH);
     if (wbytes != REQ_HEADER_LENGTH) {
         DEBUG("IO: write request header send failed");
-        env_mutex_unlock(&core_device_lock);
+        env_mutex_unlock(&core_device_sock_lock);
         return 1;
     }
 
     /** Data to write, only if passing actual data. */
     if (flashsim_enable_data) {
-        wbytes = write(sock_fd, data->ptr + data->offset, header.size);
+        wbytes = write(sock_fd, data->ptr + data->offset + io_priv->offset,
+                       header.size);
         if (wbytes != (int) header.size) {
             DEBUG("IO: write request data send failed");
-            env_mutex_unlock(&core_device_lock);
+            env_mutex_unlock(&core_device_sock_lock);
             return 2;
         }
     }
@@ -103,25 +109,31 @@ _submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     rbytes = read(sock_fd, &time_used_us, 8);
     if (rbytes != 8) {
         DEBUG("IO: write processing time recv failed");
-        env_mutex_unlock(&core_device_lock);
+        env_mutex_unlock(&core_device_sock_lock);
         return 3;
     }
 
-    env_mutex_unlock(&core_device_lock);
+    env_mutex_unlock(&core_device_sock_lock);
     /** Critical section ends. */
 
     usleep(time_used_us);   /** Simulate latency here. */
+
+    DEBUG(" _W addr = 0x%08lx, len = %u, data = %.14s",
+          io->addr, io->bytes,
+          (char *) data->ptr + data->offset + io_priv->offset);
 
     return 0;
 }
 
 static int
-_submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
-                double start_time_ms)
+_submit_read_io(struct ocf_io *io, int sock_fd, double start_time_ms)
 {
     struct req_header header;
     int rbytes, wbytes;
     uint64_t time_used_us;
+
+    core_vol_io_priv_t *io_priv = ocf_io_get_priv(io);
+    simfs_data_t *data = io_priv->data;
 
     /** Request header. */
     header.direction = FLASHSIM_DIR_READ;
@@ -130,21 +142,22 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     header.start_time_us = (uint64_t) (1000 * start_time_ms);
 
     /** Critical section: ensuring the three messages are always in order. */
-    env_mutex_lock(&core_device_lock);
+    env_mutex_lock(&core_device_sock_lock);
 
     wbytes = write(sock_fd, &header, REQ_HEADER_LENGTH);
     if (wbytes != REQ_HEADER_LENGTH) {
         DEBUG("IO: read request header send failed");
-        env_mutex_unlock(&core_device_lock);
+        env_mutex_unlock(&core_device_sock_lock);
         return 1;
     }
 
     /** Data read out, only if passing actual data. */
     if (flashsim_enable_data) {
-        rbytes = read(sock_fd, data->ptr + data->offset, header.size);
+        rbytes = read(sock_fd, data->ptr + data->offset + io_priv->offset,
+                      header.size);
         if (rbytes != (int) header.size) {
             DEBUG("IO: read request data recv failed");
-            env_mutex_unlock(&core_device_lock);
+            env_mutex_unlock(&core_device_sock_lock);
             return 2;
         }
     }
@@ -153,14 +166,18 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     rbytes = read(sock_fd, &time_used_us, 8);
     if (rbytes != 8) {
         DEBUG("IO: read processing time recv failed");
-        env_mutex_unlock(&core_device_lock);
+        env_mutex_unlock(&core_device_sock_lock);
         return 3;
     }
 
-    env_mutex_unlock(&core_device_lock);
+    env_mutex_unlock(&core_device_sock_lock);
     /** Critical section ends. */
 
     usleep(time_used_us);   /** Simulate latency here. */
+
+    DEBUG(" _R addr = 0x%08lx, len = %u, data = %.14s",
+          io->addr, io->bytes,
+          (char *) data->ptr + data->offset + io_priv->offset);
 
     return 0;
 }
@@ -206,10 +223,27 @@ _submit_thread_func(void *args)
         list_del(&entry->head);
         free(entry);
 
+        /**
+         * If is a write, acquire the writer-side lock here. This ensures
+         * that all previous requests in queue have been finished, and
+         * requests after this one in queue cannot start until this one
+         * finishes.
+         *
+         * If is a read, acquire the reader-side lock here. This allows
+         * concurrent reads when no writes are in process.
+         */
+        switch (io->dir) {
+        case OCF_WRITE:
+            env_rwlock_write_lock(&core_sequentiality_lock);
+            break;
+        case OCF_READ:
+            env_rwlock_read_lock(&core_sequentiality_lock);
+            break;
+        }
+
         env_mutex_unlock(&submit_queue_lock);
 
         /** Process the request. */
-        simfs_data_t *data = ocf_io_get_data(io);
         core_vol_priv_t *vol_priv = ocf_volume_get_priv(ocf_io_get_volume(io));
 
         // DEBUG("IO: dir = %s, core pos = 0x%08lx, len = %u",
@@ -217,10 +251,12 @@ _submit_thread_func(void *args)
 
         switch (io->dir) {
         case OCF_WRITE:
-            _submit_write_io(io, data, vol_priv->sock_fd, start_time_ms);
+            _submit_write_io(io, vol_priv->sock_fd, start_time_ms);
+            env_rwlock_write_unlock(&core_sequentiality_lock);
             break;
         case OCF_READ:
-            _submit_read_io(io, data, vol_priv->sock_fd, start_time_ms);
+            _submit_read_io(io, vol_priv->sock_fd, start_time_ms);
+            env_rwlock_read_unlock(&core_sequentiality_lock);
             break;
         }
 
@@ -287,11 +323,14 @@ core_vol_open(ocf_volume_t core_vol, void *params)
     env_completion_init(&submit_queue_sem);
 
     /** Initialize device lock. */
-    ret = env_mutex_init(&core_device_lock);
+    ret = env_mutex_init(&core_device_sock_lock);
     if (ret) {
         DEBUG("OPEN: core device lock initialization failed");
         return ret;
     }
+
+    /** Initialize sequentiality lock. */
+    env_rwlock_init(&core_sequentiality_lock);
 
     env_atomic_set(&should_stop, 0);
 
@@ -347,7 +386,9 @@ core_vol_close(ocf_volume_t core_vol)
     env_mutex_destroy(&submit_queue_lock);
     env_completion_destroy(&submit_queue_sem);
 
-    env_mutex_destroy(&core_device_lock);
+    env_mutex_destroy(&core_device_sock_lock);
+
+    env_rwlock_destroy(&core_sequentiality_lock);
 }
 
 // Exposed for device logging.
@@ -446,7 +487,7 @@ core_vol_io_set_data(struct ocf_io *io, ctx_data_t *simfs_data,
 
     /** This offset is meant to control I/O in finer granularity. */
     io_priv->data = simfs_data;
-    io_priv->offset = offset;   /** Unused in this context case. */
+    io_priv->offset = offset;
 
     return 0;
 }

@@ -23,7 +23,8 @@ typedef enum {
 	ocf_req_cache_mode_wo = ocf_cache_mode_wo,
 
 	/*========== [Orthus FLAG BEGIN] ==========*/
-	ocf_req_cache_mode_mf = ocf_cache_mode_mf,
+	ocf_req_cache_mode_mfwa = ocf_cache_mode_mfwa,
+	ocf_req_cache_mode_mfwb = ocf_cache_mode_mfwb,
 	/*========== [Orthus FLAG END] ==========*/
 
 	/* internal modes */

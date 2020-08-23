@@ -12,7 +12,7 @@
 #include "cache/cache-obj.h"
 #include "core/core-obj.h"
 #include "ocf/ocf.h"
-#include "engine_mf.h"
+#include "mf_monitor.h"
 
 
 /** Indicates whether the contexts stops the monitor. */

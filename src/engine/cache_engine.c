@@ -17,7 +17,8 @@
 #include "engine_wa.h"
 #include "engine_wb.h"
 #include "engine_wo.h"
-#include "engine_mf.h"
+#include "engine_mfwa.h"
+#include "engine_mfwb.h"
 #include "engine_fast.h"
 #include "engine_discard.h"
 #include "engine_d2c.h"
@@ -38,7 +39,8 @@ enum ocf_io_if_type {
 	OCF_IO_WO_IF,
 
 	/*========== [Orthus FLAG BEGIN] ==========*/
-	OCF_IO_MF_IF,
+	OCF_IO_MFWA_IF,
+	OCF_IO_MFWB_IF,
 	/*========== [Orthus FLAG END] ==========*/
 
 	OCF_IO_MAX_IF,
@@ -84,10 +86,15 @@ static const struct ocf_io_if IO_IFS[OCF_IO_PRIV_MAX_IF] = {
 	},
 
 	/*========== [Orthus FLAG BEGIN] ==========*/
-	[OCF_IO_MF_IF] = {
-		.read = ocf_read_mf,
-		.write = ocf_write_mf,
-		.name = "Multi-Factor",
+	[OCF_IO_MFWA_IF] = {
+		.read = ocf_read_mfwa,
+		.write = ocf_write_wa,
+		.name = "MFC with WA",
+	},
+	[OCF_IO_MFWB_IF] = {
+		.read = ocf_read_mfwb,
+		.write = ocf_write_wb,
+		.name = "MFC with WB",
 	},
 	/*========== [Orthus FLAG END] ==========*/
 
@@ -122,7 +129,8 @@ static const struct ocf_io_if *cache_mode_io_if_map[ocf_req_cache_mode_max] = {
 	[ocf_req_cache_mode_pt] = &IO_IFS[OCF_IO_PT_IF],
 
 	/*========== [Orthus FLAG BEGIN] ==========*/
-	[ocf_req_cache_mode_mf] = &IO_IFS[OCF_IO_MF_IF],
+	[ocf_req_cache_mode_mfwa] = &IO_IFS[OCF_IO_MFWA_IF],
+	[ocf_req_cache_mode_mfwb] = &IO_IFS[OCF_IO_MFWB_IF],
 	/*========== [Orthus FLAG END] ==========*/
 
 	[ocf_req_cache_mode_fast] = &IO_IFS[OCF_IO_FAST_IF],

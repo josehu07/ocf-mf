@@ -28,6 +28,7 @@ static void _ocf_write_wb_update_bits(struct ocf_request *req)
 {
 	if (ocf_engine_is_miss(req)) {
 		ocf_req_hash_lock_rd(req);
+		
 		/* Update valid status bits */
 		ocf_set_valid_map_info(req);
 

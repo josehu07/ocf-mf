@@ -1861,7 +1861,11 @@ static const char *_ocf_cache_mode_names[ocf_cache_mode_max] = {
 	[ocf_cache_mode_pt] = "pt",
 	[ocf_cache_mode_wi] = "wi",
 	[ocf_cache_mode_wo] = "wo",
-	[ocf_cache_mode_mf] = "mf",
+
+	/*========== [Orthus FLAG BEGIN] ==========*/
+	[ocf_cache_mode_mfwa] = "mfwa",
+	[ocf_cache_mode_mfwb] = "mfwb",
+	/*========== [Orthus FLAG END] ==========*/
 };
 
 static const char *_ocf_cache_mode_get_name(ocf_cache_mode_t cache_mode)

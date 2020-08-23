@@ -1,5 +1,5 @@
 /**
- * Multi-factor cache mode implementation.
+ * Multi-factor cache mode (with write-around) implementation.
  *
  * Writes always follow Write-Around (for now). Reads swtich between
  * cache & core according to `load_admit`. Reads populate lines into
@@ -24,16 +24,16 @@
 #include "engine_bf.h"
 #include "engine_common.h"
 #include "cache_engine.h"
-#include "engine_mf.h"
+#include "engine_mfwa.h"
+#include "mf_monitor.h"
 
 
-#define OCF_ENGINE_DEBUG_IO_NAME "mf"
+#define OCF_ENGINE_DEBUG_IO_NAME "mfwa"
 
 
 /**
  * These two switches should be controlled by a monitor, but for
  * now hardcoded into engine.
- * TODO: pay attention to concurrency control.
  */
 static inline bool data_admit_allow()
 {
@@ -48,9 +48,10 @@ static inline bool load_admit_allow()
 }
 
 
-/*========== Multi-factor read implementation BEGIN. ==========*/
-
-static void _ocf_read_mf_to_cache_cmpl(struct ocf_request *req, int error)
+/**
+ * Below are MFC with write-around - read implementation.
+ */
+static void _ocf_read_mfwa_to_cache_cmpl(struct ocf_request *req, int error)
 {
     if (error)
         req->error |= error;
@@ -79,17 +80,17 @@ static void _ocf_read_mf_to_cache_cmpl(struct ocf_request *req, int error)
     }
 }
 
-static inline void _ocf_read_mf_submit_to_cache(struct ocf_request *req)
+static inline void _ocf_read_mfwa_submit_to_cache(struct ocf_request *req)
 {
     env_atomic_set(&req->req_remaining, ocf_engine_io_count(req));
 
     ocf_submit_cache_reqs(req->cache, req, OCF_READ, 0, req->byte_length,
                           ocf_engine_io_count(req),
-                          _ocf_read_mf_to_cache_cmpl);
+                          _ocf_read_mfwa_to_cache_cmpl);
 }
 
-static void _ocf_read_mf_to_core_cmpl_do_promote(struct ocf_request *req,
-                                                 int error)
+static void _ocf_read_mfwa_to_core_cmpl_do_promote(struct ocf_request *req,
+                                                   int error)
 {
     struct ocf_cache *cache = req->cache;
 
@@ -134,8 +135,8 @@ static void _ocf_read_mf_to_core_cmpl_do_promote(struct ocf_request *req,
     }
 }
 
-static void _ocf_read_mf_to_core_cmpl_no_promote(struct ocf_request *req,
-                                                 int error)
+static void _ocf_read_mfwa_to_core_cmpl_no_promote(struct ocf_request *req,
+                                                   int error)
 {
     struct ocf_cache *cache = req->cache;
 
@@ -175,8 +176,8 @@ static void _ocf_read_mf_to_core_cmpl_no_promote(struct ocf_request *req,
     }
 }
 
-static inline void _ocf_read_mf_submit_to_core(struct ocf_request *req,
-                                               bool promote)
+static inline void _ocf_read_mfwa_submit_to_core(struct ocf_request *req,
+                                                 bool promote)
 {
     struct ocf_cache *cache = req->cache;
     int ret;
@@ -192,28 +193,28 @@ static inline void _ocf_read_mf_submit_to_core(struct ocf_request *req,
         req->cp_data = ctx_data_alloc(cache->owner,
                                       BYTES_TO_PAGES(req->byte_length));
         if (!req->cp_data) {
-            _ocf_read_mf_to_core_cmpl_do_promote(req, -OCF_ERR_NO_MEM);
+            _ocf_read_mfwa_to_core_cmpl_do_promote(req, -OCF_ERR_NO_MEM);
             return;
         }
 
         ret = ctx_data_mlock(cache->owner, req->cp_data);
         if (ret) {
-            _ocf_read_mf_to_core_cmpl_do_promote(req, -OCF_ERR_NO_MEM);
+            _ocf_read_mfwa_to_core_cmpl_do_promote(req, -OCF_ERR_NO_MEM);
             return;
         }
 
         /** Submit read request to core device. */
         ocf_submit_volume_req(&req->core->volume, req,
-                              _ocf_read_mf_to_core_cmpl_do_promote);
+                              _ocf_read_mfwa_to_core_cmpl_do_promote);
 
     /** Not doing promotion. */
     } else {
         ocf_submit_volume_req(&req->core->volume, req,
-                              _ocf_read_mf_to_core_cmpl_no_promote);
+                              _ocf_read_mfwa_to_core_cmpl_no_promote);
     }
 }
 
-static int _ocf_read_mf_do(struct ocf_request *req)
+static int _ocf_read_mfwa_do(struct ocf_request *req)
 {
     /** Get OCF request - increase reference counter */
     ocf_req_get(req);
@@ -237,12 +238,12 @@ static int _ocf_read_mf_do(struct ocf_request *req)
         /** Hit && p <= load_admit. */
         if (req->load_admit_allowed) {
             OCF_DEBUG_RQ(req, "Submit");
-            _ocf_read_mf_submit_to_cache(req);
+            _ocf_read_mfwa_submit_to_cache(req);
 
         /** Hit && p > load_admit. */
         } else {
             OCF_DEBUG_RQ(req, "Submit");
-            _ocf_read_mf_submit_to_core(req, false);
+            _ocf_read_mfwa_submit_to_core(req, false);
         }
 
     } else {
@@ -272,12 +273,12 @@ static int _ocf_read_mf_do(struct ocf_request *req)
             ocf_req_hash_unlock_rd(req);
 
             OCF_DEBUG_RQ(req, "Submit");
-            _ocf_read_mf_submit_to_core(req, true);
+            _ocf_read_mfwa_submit_to_core(req, true);
 
         /** Miss && data_admit is off. */
         } else {
             OCF_DEBUG_RQ(req, "Submit");
-            _ocf_read_mf_submit_to_core(req, false);
+            _ocf_read_mfwa_submit_to_core(req, false);
         }
     }
 
@@ -294,7 +295,7 @@ static int _ocf_read_mf_do(struct ocf_request *req)
 }
 
 /** Lock type should match the algorithm logic. */
-static enum ocf_engine_lock_type ocf_read_mf_get_lock_type(struct ocf_request *req)
+static enum ocf_engine_lock_type ocf_read_mfwa_get_lock_type(struct ocf_request *req)
 {
     if (ocf_engine_is_hit(req)) {
         if (req->load_admit_allowed)
@@ -309,19 +310,19 @@ static enum ocf_engine_lock_type ocf_read_mf_get_lock_type(struct ocf_request *r
     }
 }
 
-static const struct ocf_io_if _io_if_read_mf_resume = {
-    .read = _ocf_read_mf_do,
-    .write = _ocf_read_mf_do,
+static const struct ocf_io_if _io_if_read_mfwa_resume = {
+    .read = _ocf_read_mfwa_do,
+    .write = _ocf_read_mfwa_do,
 };
 
-static const struct ocf_engine_callbacks _read_mf_engine_callbacks =
+static const struct ocf_engine_callbacks _read_mfwa_engine_callbacks =
 {
-    .get_lock_type = ocf_read_mf_get_lock_type,
+    .get_lock_type = ocf_read_mfwa_get_lock_type,
     .resume = ocf_engine_on_resume,
 };
 
 /**
- * Multi-factor read.
+ * Multi-factor read with write-around.
  *
  * If fully hit && p <= `load_admit`, we read from cache. Otherwise, we
  * read from core.
@@ -331,7 +332,7 @@ static const struct ocf_engine_callbacks _read_mf_engine_callbacks =
  * into a new promotion policy because the promotion policy interface seems
  * redundant and too complicated for our algo's logic.
  */
-int ocf_read_mf(struct ocf_request *req)
+int ocf_read_mfwa(struct ocf_request *req)
 {
     int lock = OCF_LOCK_NOT_ACQUIRED;
     struct ocf_cache *cache = req->cache;
@@ -355,9 +356,9 @@ int ocf_read_mf(struct ocf_request *req)
     req->load_admit_allowed = load_admit_allow();
 
     /** Set resume call backs. */
-    req->io_if = &_io_if_read_mf_resume;
+    req->io_if = &_io_if_read_mfwa_resume;
 
-    lock = ocf_engine_prepare_clines(req, &_read_mf_engine_callbacks);
+    lock = ocf_engine_prepare_clines(req, &_read_mfwa_engine_callbacks);
 
     if (!req->info.mapping_error) {
         if (lock >= 0) {
@@ -366,7 +367,7 @@ int ocf_read_mf(struct ocf_request *req)
                 OCF_DEBUG_RQ(req, "NO LOCK");
             } else {
                 /** Lock was acquired can perform IO. */
-                _ocf_read_mf_do(req);
+                _ocf_read_mfwa_do(req);
             }
         } else {
             OCF_DEBUG_RQ(req, "LOCK ERROR %d", lock);
@@ -383,88 +384,5 @@ int ocf_read_mf(struct ocf_request *req)
 
     return 0;
 }
-
-/*========== Multi-factor read implementation END. ==========*/
-
-
-/*========== Multi-factor write implementation BEGIN. ==========*/
-
-static void _ocf_write_mf_complete(struct ocf_request *req, int error)
-{
-    if (error)
-        req->error |= error;
-
-    if (env_atomic_dec_return(&req->req_remaining))
-        return;
-
-    if (req->error) {
-        req->info.core_error = 1;
-        ocf_core_stats_core_error_update(req->core, OCF_WRITE);
-    }
-
-    /* Complete request */
-    req->complete(req, req->error);
-
-    OCF_DEBUG_RQ(req, "Completion");
-
-    /* Release OCF request */
-    ocf_req_put(req);
-}
-
-/**
- * Multi-factor write.
- * For now, it is the same as doing Write-Around.
- */
-int ocf_write_mf(struct ocf_request *req)
-{
-    ocf_io_start(&req->ioi.io);
-
-    /* Get OCF request - increase reference counter */
-    ocf_req_get(req);
-
-    ocf_req_hash(req);
-
-    ocf_req_hash_lock_rd(req); /*- Metadata RD access -----------------------*/
-
-    /* Traverse request to check if there are mapped cache lines */
-    ocf_engine_traverse(req);
-
-    ocf_req_hash_unlock_rd(req); /*- END Metadata RD access -----------------*/
-
-    if (ocf_engine_is_hit(req)) {
-        ocf_req_clear(req);
-
-        /* There is HIT, do WT */
-        ocf_get_io_if(ocf_cache_mode_wt)->write(req);
-
-    } else if (ocf_engine_mapped_count(req)) {
-        ocf_req_clear(req);
-
-        /* Partial MISS, do WI */
-        ocf_get_io_if(ocf_cache_mode_wi)->write(req);
-    } else {
-
-        /* There is no mapped cache line, write directly into core */
-
-        OCF_DEBUG_RQ(req, "Submit");
-
-        /* Submit write IO to the core */
-        env_atomic_set(&req->req_remaining, 1);
-        ocf_submit_volume_req(&req->core->volume, req,
-                _ocf_write_mf_complete);
-
-        /* Update statistics */
-        ocf_engine_update_block_stats(req);
-        ocf_core_stats_request_pt_update(req->core, req->part_id, req->rw,
-                req->info.hit_no, req->core_line_count);
-    }
-
-    /* Put OCF request - decrease reference counter */
-    ocf_req_put(req);
-
-    return 0;
-}
-
-/*========== Multi-factor write implementation END. ==========*/
 
 /*========== [Orthus FLAG END] ==========*/
