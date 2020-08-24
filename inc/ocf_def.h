@@ -173,7 +173,10 @@ typedef enum {
 	ocf_cache_mode_mfwb,
 		/*!< Multi-factor cache mode with write-back */
 
-	/*========== [Orthus FLAG BEGIN] ==========*/
+	ocf_cache_mode_mfwt,
+		/*!< Multi-factor cache mode with write-through */
+
+	/*========== [Orthus FLAG END] ==========*/
 
 	ocf_cache_mode_max,
 		/*!< Stopper of cache mode enumerator */

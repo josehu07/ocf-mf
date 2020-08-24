@@ -26,14 +26,14 @@ double base_time_ms = 0.0;
 /**
  * Callback functions to be called when operation completes.
  */
-// static void
-// write_cmpl_callback(struct ocf_io *io, int error)
-// {
-//     if (error != 0)
-//         DEBUG("WR COMPLETE: error = %d", error);
+static void
+write_cmpl_callback(struct ocf_io *io, int error)
+{
+    if (error != 0)
+        DEBUG("WR COMPLETE: error = %d", error);
 
-//     ocf_io_put(io);
-// }
+    ocf_io_put(io);
+}
 
 static void
 read_cmpl_callback(struct ocf_io *io, int error)
@@ -344,7 +344,7 @@ perform_workload_tp_hack(ocf_core_t core, int intensity)
         usleep((int) (delta_ms * 1000));
     } while (cur_time_ms < base_time_ms + 1000.0 * 180);
 
-    /** Force stop. */
+    /** Force device volume submission threads to stop. */
     cache_vol_force_stop();
     core_vol_force_stop();
 

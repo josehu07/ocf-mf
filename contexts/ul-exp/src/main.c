@@ -385,10 +385,14 @@ main(int argc, char *argv[])
         cache_mode = BENCH_CACHE_MODE_WA;
     else if (! strncmp(argv[1], "wb", 2))
         cache_mode = BENCH_CACHE_MODE_WB;
+    else if (! strncmp(argv[1], "wt", 2))
+        cache_mode = BENCH_CACHE_MODE_WT;
     else if (! strncmp(argv[1], "mfwa", 4))
         cache_mode = BENCH_CACHE_MODE_MFWA;
     else if (! strncmp(argv[1], "mfwb", 4))
         cache_mode = BENCH_CACHE_MODE_MFWB;
+    else if (! strncmp(argv[1], "mfwt", 4))
+        cache_mode = BENCH_CACHE_MODE_MFWT;
     else
         prompt_usage_exit();
     printf("  Using cache mode: %s\n", argv[1]);
@@ -447,7 +451,8 @@ main(int argc, char *argv[])
 
     /** 5. Init and start the monitor. */
     if (cache_mode == BENCH_CACHE_MODE_MFWA
-        || cache_mode == BENCH_CACHE_MODE_MFWB) {
+        || cache_mode == BENCH_CACHE_MODE_MFWB
+        || cache_mode == BENCH_CACHE_MODE_MFWT) {
         ret = ocf_mngt_mf_monitor_init(core);
         if (ret)
             error("Unable to start monitor thread", ret);
@@ -463,7 +468,8 @@ main(int argc, char *argv[])
 
     /** 7. Stop the multi-factor monitor. */
     if (cache_mode == BENCH_CACHE_MODE_MFWA
-        || cache_mode == BENCH_CACHE_MODE_MFWB)
+        || cache_mode == BENCH_CACHE_MODE_MFWB
+        || cache_mode == BENCH_CACHE_MODE_MFWT)
         ocf_mngt_mf_monitor_stop();
 
     /** 8. Collect & show statistics. */

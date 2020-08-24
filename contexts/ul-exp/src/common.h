@@ -60,8 +60,10 @@ enum bench_cache_mode {
     BENCH_CACHE_MODE_PT,    /** Pass-through. */
     BENCH_CACHE_MODE_WA,    /** Write-around. */
     BENCH_CACHE_MODE_WB,    /** Write-back. */
+    BENCH_CACHE_MODE_WT,    /** Write-back. */
     BENCH_CACHE_MODE_MFWA,  /** Multi-factor with write-around. */
     BENCH_CACHE_MODE_MFWB,  /** Multi-factor with write-back. */
+    BENCH_CACHE_MODE_MFWT,  /** Multi-factor with write-through. */
 };
 
 

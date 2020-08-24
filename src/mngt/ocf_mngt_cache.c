@@ -1876,6 +1876,7 @@ static const char *_ocf_cache_mode_names[ocf_cache_mode_max] = {
 	/*========== [Orthus FLAG BEGIN] ==========*/
 	[ocf_cache_mode_mfwa] = "mfwa",
 	[ocf_cache_mode_mfwb] = "mfwb",
+	[ocf_cache_mode_mfwt] = "mfwt",
 	/*========== [Orthus FLAG END] ==========*/
 };
 

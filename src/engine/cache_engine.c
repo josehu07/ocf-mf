@@ -41,6 +41,7 @@ enum ocf_io_if_type {
 	/*========== [Orthus FLAG BEGIN] ==========*/
 	OCF_IO_MFWA_IF,
 	OCF_IO_MFWB_IF,
+	OCF_IO_MFWT_IF,
 	/*========== [Orthus FLAG END] ==========*/
 
 	OCF_IO_MAX_IF,
@@ -96,6 +97,11 @@ static const struct ocf_io_if IO_IFS[OCF_IO_PRIV_MAX_IF] = {
 		.write = ocf_write_wb,
 		.name = "MFC with WB",
 	},
+	[OCF_IO_MFWT_IF] = {
+		.read = ocf_read_mfwa,
+		.write = ocf_write_wt,
+		.name = "MFC with WT",
+	},
 	/*========== [Orthus FLAG END] ==========*/
 
 	[OCF_IO_FAST_IF] = {
@@ -131,6 +137,7 @@ static const struct ocf_io_if *cache_mode_io_if_map[ocf_req_cache_mode_max] = {
 	/*========== [Orthus FLAG BEGIN] ==========*/
 	[ocf_req_cache_mode_mfwa] = &IO_IFS[OCF_IO_MFWA_IF],
 	[ocf_req_cache_mode_mfwb] = &IO_IFS[OCF_IO_MFWB_IF],
+	[ocf_req_cache_mode_mfwt] = &IO_IFS[OCF_IO_MFWT_IF],
 	/*========== [Orthus FLAG END] ==========*/
 
 	[ocf_req_cache_mode_fast] = &IO_IFS[OCF_IO_FAST_IF],

@@ -186,10 +186,14 @@ cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache,
         cache_cfg.cache_mode = ocf_cache_mode_wa;
     else if (cache_mode == BENCH_CACHE_MODE_WB)
         cache_cfg.cache_mode = ocf_cache_mode_wb;
+    else if (cache_mode == BENCH_CACHE_MODE_WT)
+        cache_cfg.cache_mode = ocf_cache_mode_wt;
     else if (cache_mode == BENCH_CACHE_MODE_MFWA)
         cache_cfg.cache_mode = ocf_cache_mode_mfwa;
     else if (cache_mode == BENCH_CACHE_MODE_MFWB)
         cache_cfg.cache_mode = ocf_cache_mode_mfwb;
+    else if (cache_mode == BENCH_CACHE_MODE_MFWT)
+        cache_cfg.cache_mode = ocf_cache_mode_mfwt;
     else
         return -1;
 
