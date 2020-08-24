@@ -201,6 +201,9 @@ struct ocf_request {
 	bool load_admit_allowed;
 
 	/*========== [Orthus FLAG END] ==========*/
+	
+	uint8_t wi_second_pass : 1;
+	/*!< Set after first pass of WI write is completed */
 
 	log_sid_t sid;
 	/*!< Tracing sequence ID */
