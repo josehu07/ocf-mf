@@ -64,6 +64,7 @@ static env_mutex cache_device_lock;
 /**
  * Routines to read from or write to the storage device.
  */
+/** TODO 4: Write to real device. */
 static int
 _submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
                  double start_time_ms)
@@ -114,6 +115,7 @@ _submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
     return 0;
 }
 
+/** TODO 4: Read from real device. */
 static int
 _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
                 double start_time_ms)
@@ -255,6 +257,8 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
 
     vol_priv->name = ocf_uuid_to_str(uuid);
 
+    /** TODO 1: Open real device. */
+    
     /** Prepare socket here. */
     vol_priv->sock_name = cache_sock_name;
     vol_priv->sock_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
@@ -335,6 +339,7 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
 static void
 cache_vol_close(ocf_volume_t cache_vol)
 {
+    /** TODO 2: Close real device. */
     cache_vol_priv_t *vol_priv = ocf_volume_get_priv(cache_vol);
 
     DEBUG("CLOSE: name = %s", vol_priv->name);
