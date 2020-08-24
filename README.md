@@ -22,6 +22,7 @@ contexts/
  |   |- cache-ssd.conf  # Cache SSD configuration used in experiments
  |   |- core-ssd.conf   # Core SSD configuration used in experiments
  |   |- run-flashsim.sh
+ |   |- ...
 
 # These are the OCF library - I added cache mode `mf` into the engine
 src/
@@ -30,12 +31,17 @@ src/
  |- inc/            # OCF headers exposed to context code
  |- src/            # OCF library source code
  |   |- engine/             
- |   |   |- engine_mf.c     # Multi-factor caching is implemented as a new cache mode `mf`
- |   |   |- engine_mf.h     # Everything I have added are marked by `[Orthus FLAG BEGIN]`
- |   |   |- mf_monitor.c    # and `[Orthus FLAG END]`. 
+ |   |   |- engine_mfwa.c   # Multi-factor cache mode with write-around
+ |   |   |- engine_mfwa.h
+ |   |   |- engine_mfwb.c   # Multi-factor cache mode with write-back
+ |   |   |- engine_mfwb.h
+ |   |   |- mf_monitor.c    # Multi-factor monitor logic
+ |   |   |- mf_monitor.h
  |   |   |- ...
  |   |- ...
 ```
+
+Everything I have added into the OCF library are marked by `[Orthus FLAG BEGIN]` and `[Orthus FLAG END]` for easier future reference.
 
 
 ## Usage
@@ -55,25 +61,53 @@ $ cd contexts/ul-exp
 $ make
 ```
 
-This will link the OCF library to this location and compile it together with your main file into a single executable `./bench`. Run it by:
+This will link the OCF library to this location and compile it together with your main file into a single executable `./bench`.
+
+### Benchmarking Experiments
+
+Ensure that the `PAGE_ENABLE_DATA` option in both cache and core FlashSim config files are set to `0`. Then, start cache and core FlashSim devices by:
 
 ```bash
-# In shell 1
+# In shell 1:
 $ ./run-flashsim.sh cache
 
-# In shell 2
+# In shell 2:
 $ ./run-flashsim.sh core
+```
 
-# In shell 3
-$ ./bench wa|mf|pt intensity    # E.g., ./bench mf 10000
+Then, in yet another shell:
+
+```bash
+# In shell 3:
+$ ./bench <pt|wa|wb|mfwa|mfwb> <intensity>  # E.g., ./bench mfwa 10000
 ```
 
 The exact way of invoking `./bench` depends on how you write the `main.c`. Currently, it is for intensity experiments.
+
+### Fuzzy Testing for Correctness
+
+Ensure that the `PAGE_ENABLE_DATA` option in both cache and core FlashSim config files are set to `1`. Then, start cache and core FlashSim devices by:
+
+```bash
+# In shell 1:
+$ ./run-flashsim.sh cache
+
+# In shell 2:
+$ ./run-flashsim.sh core
+```
+
+Then, in yet another shell:
+
+```bash
+# In shell 3:
+$ ./bench <pt|wa|wb|mfwa|mfwb> fuzzy        # E.g., ./bench mfwa fuzzy
+```
 
 
 ## TODO List
 
 - [x] Model in-device parallelism. For each volume, there is a submission queue (See `cache/cache-vol.c` and `core/core-vol.c`). Currently, it processes requests one at a time. However, it should process requests at a parallelism degree of the SSD's number of packages (channels).
+- [ ] Multi-factor cache mode with different write-allocation policies: Write-Around, Write-Back, and perhaps Write-Invalidate
 - [ ] More sophisticated benchmarking logic in `workload/...`.
 - [ ] Porting the `mf` cache mode to Open CAS Linux: Need to ensure that it is implemented in a kernel-safe way. (Currently it is not 100% safe - for example, it directly uses `pthread_create()` and `malloc()`.)
 - [ ] Better ways of measuring throughput? Currently, each backend keeps a log of finished requests (See `cache/cache-obj.c` and `core/core-obj.c`).

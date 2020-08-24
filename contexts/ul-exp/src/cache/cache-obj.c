@@ -179,12 +179,19 @@ cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache,
      */
     ocf_mngt_cache_config_set_default(&cache_cfg);
     cache_cfg.metadata_volatile = true;
-    if (cache_mode == BENCH_CACHE_MODE_MF)
-        cache_cfg.cache_mode = ocf_cache_mode_mf;
+    
+    if (cache_mode == BENCH_CACHE_MODE_PT)
+        cache_cfg.cache_mode = ocf_cache_mode_pt;
     else if (cache_mode == BENCH_CACHE_MODE_WA)
         cache_cfg.cache_mode = ocf_cache_mode_wa;
+    else if (cache_mode == BENCH_CACHE_MODE_WB)
+        cache_cfg.cache_mode = ocf_cache_mode_wb;
+    else if (cache_mode == BENCH_CACHE_MODE_MFWA)
+        cache_cfg.cache_mode = ocf_cache_mode_mfwa;
+    else if (cache_mode == BENCH_CACHE_MODE_MFWB)
+        cache_cfg.cache_mode = ocf_cache_mode_mfwb;
     else
-        cache_cfg.cache_mode=  ocf_cache_mode_pt;
+        return -1;
 
     /**
      * Set cache device configuration to default, and assign volume type

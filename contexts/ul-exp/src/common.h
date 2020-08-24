@@ -57,9 +57,11 @@ double get_cur_time_ms();
  * Enumerate of possible cache modes.
  */
 enum bench_cache_mode {
-    BENCH_CACHE_MODE_MF,    /** Multi-factor. */
-    BENCH_CACHE_MODE_WA,    /** Write-around. */
     BENCH_CACHE_MODE_PT,    /** Pass-through. */
+    BENCH_CACHE_MODE_WA,    /** Write-around. */
+    BENCH_CACHE_MODE_WB,    /** Write-back. */
+    BENCH_CACHE_MODE_MFWA,  /** Multi-factor with write-around. */
+    BENCH_CACHE_MODE_MFWB,  /** Multi-factor with write-back. */
 };
 
 

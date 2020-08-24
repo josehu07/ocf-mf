@@ -277,10 +277,10 @@ _read_cache_device_config()
     cache_capacity_bytes = cache_parallelism * package_size * die_size
                            * plane_size * block_size * page_size;
     cache_capacity_bytes = (uint64_t) (cache_capacity_bytes
-                                       * 0.5);  /** Only use 40%. */
+                                       * 0.125);    /** Only use 1/8. */
     if (cache_capacity_bytes <= 0)
         error("Invalid cache SSD capacity", 2);
-    printf("  Cache 50%% capacity: %ld bytes\n", cache_capacity_bytes);
+    printf("  Cache 1/8 capacity: %ld bytes\n", cache_capacity_bytes);
 }
 
 static void
@@ -328,10 +328,10 @@ _read_core_device_config()
     core_capacity_bytes = core_parallelism * package_size * die_size
                           * plane_size * block_size * page_size;
     core_capacity_bytes = (uint64_t) (core_capacity_bytes
-                                      * 0.5);  /** Only use 40%. */
+                                      * 0.125);     /** Only use 1/8. */
     if (core_capacity_bytes <= 0)
         error("Invalid cache SSD capacity", 3);
-    printf("  Core 50%% capacity: %ld bytes\n", core_capacity_bytes);
+    printf("  Core 1/8 capacity: %ld bytes\n", core_capacity_bytes);
 
     printf("  FlashSim page size: %ld bytes\n", flashsim_page_size);
     printf("  FlashSim enable data: %s\n", flashsim_enable_data ? "true"
@@ -342,6 +342,15 @@ _read_core_device_config()
 /**
  * Main entrance for a round of testing.
  */
+static inline void
+prompt_usage_exit()
+{
+    fprintf(stderr, "Usage:\n"
+                    "  1) ./bench <pt|wa|wb|mfwa|mfwb> <intensity>\n"
+                    "  2) ./bench <pt|wa|wb|mfwa|mfwb> fuzzy\n");
+    exit(1);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -353,8 +362,12 @@ main(int argc, char *argv[])
     struct ocf_stats_blocks stats_blocks;
     struct ocf_stats_errors stats_errors;
 
-    int intensity, ret;
+    bool fuzzy_testing = false;
+    int intensity = -1, ret;
     enum bench_cache_mode cache_mode;
+
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
 
     printf("\nExperiment setup parameters:\n\n");
 
@@ -363,25 +376,31 @@ main(int argc, char *argv[])
     core_sock_name  = "core-sock";
 
     /** Get cache mode and intensity for this round of experiment. */
-    if (argc != 3) {
-        fprintf(stderr, "Usage: ./bench mf|wa|pt intensity\n");
-        exit(1);
-    }
+    if (argc != 3)
+        prompt_usage_exit();
 
-    if (! strncmp(argv[1], "mf", 2))
-        cache_mode = BENCH_CACHE_MODE_MF;
+    if (! strncmp(argv[1], "pt", 2))
+        cache_mode = BENCH_CACHE_MODE_PT;
     else if (! strncmp(argv[1], "wa", 2))
         cache_mode = BENCH_CACHE_MODE_WA;
-    else if (! strncmp(argv[1], "pt", 2))
-        cache_mode = BENCH_CACHE_MODE_PT;
-    else {
-        fprintf(stderr, "Usage: ./bench mf|wa|pt intensity\n");
-        exit(1);
-    }
+    else if (! strncmp(argv[1], "wb", 2))
+        cache_mode = BENCH_CACHE_MODE_WB;
+    else if (! strncmp(argv[1], "mfwa", 4))
+        cache_mode = BENCH_CACHE_MODE_MFWA;
+    else if (! strncmp(argv[1], "mfwb", 4))
+        cache_mode = BENCH_CACHE_MODE_MFWB;
+    else
+        prompt_usage_exit();
     printf("  Using cache mode: %s\n", argv[1]);
 
-    intensity = (int) strtol(argv[2], NULL, 10);
-    printf("  Intensity: %d 4KiB-Reqs/s\n", intensity);
+    if (! strncmp(argv[2], "fuzzy", 5)) {
+        fuzzy_testing = true;
+        printf("  Doing fuzzy testing...\n");
+    } else {
+        fuzzy_testing = false;
+        intensity = (int) strtol(argv[2], NULL, 10);
+        printf("  Intensity: %d 4KiB-Reqs/s\n", intensity);
+    }
 
     /** Get CPU frequency for timing purpose. */
     _read_cpu_frequency();
@@ -427,20 +446,24 @@ main(int argc, char *argv[])
         error("Unable to initialize core", ret);
 
     /** 5. Init and start the monitor. */
-    if (cache_mode == BENCH_CACHE_MODE_MF) {
+    if (cache_mode == BENCH_CACHE_MODE_MFWA
+        || cache_mode == BENCH_CACHE_MODE_MFWB) {
         ret = ocf_mngt_mf_monitor_init(core);
         if (ret)
             error("Unable to start monitor thread", ret);
     }
 
     /** 6. Perform workload. */
-    // ret = perform_workload_fuzzy(core, 36000);
-    ret = perform_workload_tp_hack(core, cache_mode, intensity);
+    if (fuzzy_testing)
+        ret = perform_workload_fuzzy(core, 30000);
+    else
+        ret = perform_workload_tp_hack(core, intensity);
     if (ret)
       error("Error when performing workload", ret);
 
     /** 7. Stop the multi-factor monitor. */
-    if (cache_mode == BENCH_CACHE_MODE_MF)
+    if (cache_mode == BENCH_CACHE_MODE_MFWA
+        || cache_mode == BENCH_CACHE_MODE_MFWB)
         ocf_mngt_mf_monitor_stop();
 
     /** 8. Collect & show statistics. */

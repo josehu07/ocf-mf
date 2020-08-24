@@ -11,8 +11,7 @@
 #include "ocf_env.h"
 
 
-int perform_workload_tp_hack(ocf_core_t core, enum bench_cache_mode cache_mode,
-                             int intensity);
+int perform_workload_tp_hack(ocf_core_t core, int intensity);
 
 
 #endif

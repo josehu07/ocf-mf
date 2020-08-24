@@ -16,7 +16,7 @@
 #include "common.h"
 #include "tp-hacking.h"
 
-#include "../../../src/engine/engine_mf.h"
+#include "../../../src/engine/mf_monitor.h"
 
 
 // Exposed for device logging.
@@ -162,12 +162,11 @@ submit_10_ios_in_a_row(ocf_core_t core, simfs_data_t *simfs_data,
 
 
 int
-perform_workload_tp_hack(ocf_core_t core, enum bench_cache_mode cache_mode,
-                         int intensity)
+perform_workload_tp_hack(ocf_core_t core, int intensity)
 {
     /** Must have ENABLE_DATA == false when doing this benchmarking. */
     if (flashsim_enable_data) {
-        fprintf(stderr, "Recommend having ENABLE_DATA option off "
+        fprintf(stderr, "Recommend having PAGE_ENABLE_DATA option off "
                         "when benchmarking.\n");
         return -1;
     }
@@ -175,7 +174,7 @@ perform_workload_tp_hack(ocf_core_t core, enum bench_cache_mode cache_mode,
     /** Intensity must be a multiple of 10. */
     if (intensity % 10 != 0) {
         fprintf(stderr, "Intensity must be a multiple of 10.\n");
-        return -1;
+        return -2;
     }
 
     simfs_data_t *data = simfs_data_alloc(1);
@@ -344,8 +343,6 @@ perform_workload_tp_hack(ocf_core_t core, enum bench_cache_mode cache_mode,
 
         usleep((int) (delta_ms * 1000));
     } while (cur_time_ms < base_time_ms + 1000.0 * 180);
-
-    fflush(stdout);
 
     /** Force stop. */
     cache_vol_force_stop();

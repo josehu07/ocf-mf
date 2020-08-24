@@ -1,5 +1,5 @@
 /**
- * Multi-factor cache mode implementation.
+ * Multi-factor cache mode (with write-around) implementation.
  *
  * Writes always follow Write-Around (for now). Reads swtich between
  * cache & core according to `load_admit`. Reads populate lines into
@@ -12,22 +12,16 @@
 
 /*========== [Orthus FLAG BEGIN] ==========*/
 
-#ifndef ENGINE_MF_H_
-#define ENGINE_MF_H_
+#ifndef ENGINE_MFWA_H_
+#define ENGINE_MFWA_H_
 
 
-#include <stdbool.h>
 #include "../ocf_request.h"
 
 
-bool monitor_query_data_admit();
-double monitor_query_load_admit();
+int ocf_read_mfwa(struct ocf_request *req);
 
 
-int ocf_read_mf(struct ocf_request *req);
-int ocf_write_mf(struct ocf_request *req);
+#endif /* ENGINE_MFWA_H_ */
 
 /*========== [Orthus FLAG END] ==========*/
-
-
-#endif /* ENGINE_MF_H_ */
