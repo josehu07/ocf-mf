@@ -27,7 +27,7 @@ contexts/
 ```
 
 ```text
-# These are the OCF library - I added cache mode `mf` into the engine
+# These are the OCF library - I added mf cache modes into the engine
 src/
  |- env/
  |   |- posix/      # POSIX environment specific support
@@ -105,8 +105,8 @@ Then, in yet another shell:
 # In shell 3:
 $ ./bench <mode> <bench_name> [bench_args]  # E.g., ./bench mfwa intensity 12000
 Where:
-  mode := pt|wa|wb|wt|mfwa|mfwb|mfwt
-  bench_name & bench_args are defined by benchmarks
+    mode := pt|wa|wb|wt|mfwa|mfwb|mfwt
+    bench_name & bench_args are defined by benchmarks
 ```
 
 The exact way of invoking `./bench` on experiments depends on the benchmarks code. The above example is for intensity experiments.

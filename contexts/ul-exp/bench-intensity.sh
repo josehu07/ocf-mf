@@ -1,14 +1,16 @@
 #!/usr/bin/bash
 
 
-for MODE in pt wa mf
+for MODE in pt wa wb wt mfwa mfwb mfwt
 do
     echo "Doing mode ${MODE} - "
 
-    for i in {10000..24000..1000}
+    for i in {10000..25000..1000}
     do
-        echo "  Intensity $i ..."
+        echo "  intensity $i ..."
         
-        ./bench ${MODE} $i > results/result-$i-${MODE}.txt
+        ./bench ${MODE} intensity $i > result/result-$i-${MODE}.txt
+
+        sleep 5
     done
 done
