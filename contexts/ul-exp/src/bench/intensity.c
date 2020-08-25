@@ -1,5 +1,5 @@
 /**
- * Supports multi-factor caching algorithm.
+ * Benchmark - System action on given intensity.
  */
 
 
@@ -14,7 +14,7 @@
 #include "core/core-obj.h"
 #include "core/core-vol.h"
 #include "common.h"
-#include "tp-hacking.h"
+#include "intensity.h"
 
 #include "../../../src/engine/mf_monitor.h"
 
@@ -162,8 +162,20 @@ submit_10_ios_in_a_row(ocf_core_t core, simfs_data_t *simfs_data,
 
 
 int
-perform_workload_tp_hack(ocf_core_t core, int intensity)
+bench_intensity(ocf_core_t core, int num_args, char **bench_args)
 {
+    int intensity;
+    
+    if (num_args != 1) {
+        fprintf(stderr, "Wrong number of arguments\n");
+        return -1;
+    }
+
+    intensity = (int) strtol(bench_args[0], NULL, 10);
+
+    printf("\nExperiment parameters:\n\n");
+    printf("  Intensity: %d 4KiB-Reqs/s\n", intensity);
+
     /** Must have ENABLE_DATA == false when doing this benchmarking. */
     if (flashsim_enable_data) {
         fprintf(stderr, "Recommend having PAGE_ENABLE_DATA option off "

@@ -230,6 +230,8 @@ perform_workload_fuzzy(ocf_core_t core, int num_ios)
 {
     int i, ret;
 
+    printf("\nDoing fuzzy testing...\n");
+
     /** Must have ENABLE_DATA == true when doing this fuzzy testing. */
     if (! flashsim_enable_data) {
         fprintf(stderr, "Fuzzy testing requires PAGE_ENABLE_DATA option "

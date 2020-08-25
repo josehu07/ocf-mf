@@ -48,8 +48,7 @@ FILE *fmonitor = NULL;
 #include "cache/cache-obj.h"
 #include "core/core-vol.h"
 #include "core/core-obj.h"
-#include "workload/fuzzy-test.h"
-#include "workload/tp-hacking.h"
+#include "fuzzy/fuzzy-test.h"
 #include "common.h"
 
 
@@ -59,6 +58,25 @@ error(const char *msg, int error)
     fprintf(stderr, "ERROR: %s, code = %d\n", msg, error);
     exit(1);
 }
+
+
+/**
+ * Enumerate of possible benchmarking experiments.
+ * Be sure to add into this list when a new one was implemented.
+ */
+typedef int (*benchmark_t) (ocf_core_t, int, char **);
+
+#include "bench/intensity.h"
+
+static char *bench_names[] = {
+    "intensity",
+    "MAX_BENCH_NAME",
+};
+
+static benchmark_t bench_funcs[] = {
+    bench_intensity,
+    NULL,
+};
 
 
 /**
@@ -340,17 +358,52 @@ _read_core_device_config()
 
 
 /**
- * Main entrance for a round of testing.
+ * Prompt usage and exit with error.
  */
 static inline void
 prompt_usage_exit()
 {
     fprintf(stderr, "Usage:\n"
-                    "  1) ./bench <pt|wa|wb|mfwa|mfwb> <intensity>\n"
-                    "  2) ./bench <pt|wa|wb|mfwa|mfwb> fuzzy\n");
+                    "  1) ./bench <mode> fuzzy                    "
+                    "  # For fuzzy testing\n"
+                    "  2) ./bench <mode> <bench_name> [bench_args]"
+                    "  # For benchmarking\n"
+                    "Where:\n"
+                    "  mode := pt|wa|wb|wt|mfwa|mfwb|mfwt\n"
+                    "  bench_name & bench_args are defined by benchmarks\n");
     exit(1);
 }
 
+
+/**
+ * Unified entrance for doing benchmarking.
+ */
+static int
+perform_workload_bench(ocf_core_t core, char *bench_name, int num_args,
+                       char **bench_args)
+{
+    int i = 0;
+    benchmark_t bench_func = NULL;
+
+    while (strcmp(bench_name, bench_names[i])) {
+        if (! strcmp(bench_names[i], "MAX_BENCH_NAME")) {
+            fprintf(stderr, "Cannot find benchmark handle for \'%s\'\n",
+                    bench_name);
+            prompt_usage_exit();
+        }
+
+        ++i;
+    }
+
+    bench_func = bench_funcs[i];
+
+    return bench_func(core, num_args, bench_args);
+}
+
+
+/**
+ * Main entrance for a round of testing.
+ */
 int
 main(int argc, char *argv[])
 {
@@ -363,20 +416,22 @@ main(int argc, char *argv[])
     struct ocf_stats_errors stats_errors;
 
     bool fuzzy_testing = false;
-    int intensity = -1, ret;
     enum bench_cache_mode cache_mode;
+    int num_args = -1, ret, i;
+    char *bench_name = NULL;
+    char **bench_args = NULL;
 
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 
-    printf("\nExperiment setup parameters:\n\n");
+    printf("\nMain setup parameters:\n\n");
 
     /** FlashSim sockets. */
     cache_sock_name = "cache-sock";
     core_sock_name  = "core-sock";
 
-    /** Get cache mode and intensity for this round of experiment. */
-    if (argc != 3)
+    /** Get cache mode and arguments for this round of experiment. */
+    if (argc < 3)
         prompt_usage_exit();
 
     if (! strncmp(argv[1], "pt", 2))
@@ -399,11 +454,16 @@ main(int argc, char *argv[])
 
     if (! strncmp(argv[2], "fuzzy", 5)) {
         fuzzy_testing = true;
-        printf("  Doing fuzzy testing...\n");
     } else {
         fuzzy_testing = false;
-        intensity = (int) strtol(argv[2], NULL, 10);
-        printf("  Intensity: %d 4KiB-Reqs/s\n", intensity);
+        bench_name = argv[2];
+
+        num_args = argc - 3;
+        if (num_args > 0) {
+            bench_args = malloc(sizeof(char *) * num_args);
+            for (i = 0; i < num_args; ++i)
+                bench_args[i] = argv[i + 3];
+        }
     }
 
     /** Get CPU frequency for timing purpose. */
@@ -462,7 +522,7 @@ main(int argc, char *argv[])
     if (fuzzy_testing)
         ret = perform_workload_fuzzy(core, 30000);
     else
-        ret = perform_workload_tp_hack(core, intensity);
+        ret = perform_workload_bench(core, bench_name, num_args, bench_args);
     if (ret)
       error("Error when performing workload", ret);
 

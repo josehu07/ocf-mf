@@ -23,7 +23,9 @@ contexts/
  |   |- core-ssd.conf   # Core SSD configuration used in experiments
  |   |- run-flashsim.sh
  |   |- ...
+```
 
+```text
 # These are the OCF library - I added cache mode `mf` into the engine
 src/
  |- env/
@@ -63,27 +65,6 @@ $ make
 
 This will link the OCF library to this location and compile it together with your main file into a single executable `./bench`.
 
-### Benchmarking Experiments
-
-Ensure that the `PAGE_ENABLE_DATA` option in both cache and core FlashSim config files are set to `0`. Then, start cache and core FlashSim devices by:
-
-```bash
-# In shell 1:
-$ ./run-flashsim.sh cache
-
-# In shell 2:
-$ ./run-flashsim.sh core
-```
-
-Then, in yet another shell:
-
-```bash
-# In shell 3:
-$ ./bench <pt|wa|wb|mfwa|mfwb> <intensity>  # E.g., ./bench mfwa 10000
-```
-
-The exact way of invoking `./bench` depends on how you write the `main.c`. Currently, it is for intensity experiments.
-
 ### Fuzzy Testing for Correctness
 
 Ensure that the `PAGE_ENABLE_DATA` option in both cache and core FlashSim config files are set to `1`. Then, start cache and core FlashSim devices by:
@@ -100,8 +81,43 @@ Then, in yet another shell:
 
 ```bash
 # In shell 3:
-$ ./bench <pt|wa|wb|mfwa|mfwb> fuzzy        # E.g., ./bench mfwa fuzzy
+$ ./bench <mode> fuzzy                      # E.g., ./bench mfwa fuzzy
+Where:
+    mode := pt|wa|wb|wt|mfwa|mfwb|mfwt
 ```
+
+### Benchmarking Experiments
+
+Ensure that the `PAGE_ENABLE_DATA` option in both cache and core FlashSim config files are set to `0`. Then, start cache and core FlashSim devices by:
+
+```bash
+# In shell 1:
+$ ./run-flashsim.sh cache
+
+# In shell 2:
+$ ./run-flashsim.sh core
+```
+
+Then, in yet another shell:
+
+```bash
+# In shell 3:
+$ ./bench <mode> <bench_name> [bench_args]  # E.g., ./bench mfwa intensity 12000
+Where:
+  mode := pt|wa|wb|wt|mfwa|mfwb|mfwt
+  bench_name & bench_args are defined by benchmarks
+```
+
+The exact way of invoking `./bench` on experiments depends on the benchmarks code. The above example is for intensity experiments.
+
+### Adding a New Benchmark
+
+To add a new benchmarking experiment called `new_bench` for example, do:
+
+1. Navigate to the folder `contexts/ul-exp/src/bench/`. There you will find benchmarking experiments implementation. Add `new_bench.c` & `new_bench.h` there. (Follow `intensity.c` & `intensity.h` as a guidance.)
+2. In `contexts/ul-exp/src/main.c`, find the arrays `bench_names` and `bench_funcs` at the top. Add your new benchmark in. (Follow the `intensity` benchmark as a guidance.)
+
+Your benchmark can take in multiple arguments. Just be sure to parse those arguments correctly in your benchmarking function.
 
 
 ## TODO List
