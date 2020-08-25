@@ -15,7 +15,8 @@ contexts/
  |   |   |- cache/      # Cache volume FlashSim driver, queue, and log
  |   |   |- core/       # Core volume FlashSim driver, queue, and log
  |   |   |- simfs/      # Dummy application context
- |   |   |- workload/   # Benchmarking logics should go here
+ |   |   |- fuzzy/      # Fuzzy testing workload (for correctness)
+ |   |   |- bench/      # All benchmarking logics should go here
  |   |   |- main.c
  |   |   |- ...
  |   |- Makefile
@@ -33,13 +34,13 @@ src/
  |- inc/            # OCF headers exposed to context code
  |- src/            # OCF library source code
  |   |- engine/             
- |   |   |- engine_mfwa.c   # Multi-factor cache mode with write-around
+ |   |   |- engine_mfwa.c   # Multi-factor cache mode read with write-around
  |   |   |- engine_mfwa.h
- |   |   |- engine_mfwb.c   # Multi-factor cache mode with write-back
+ |   |   |- engine_mfwb.c   # Multi-factor cache mode read with write-back
  |   |   |- engine_mfwb.h
  |   |   |- mf_monitor.c    # Multi-factor monitor logic
  |   |   |- mf_monitor.h
- |   |   |- ...
+ |   |   |- ...             # Some other files are also touched
  |   |- ...
 ```
 
@@ -123,9 +124,10 @@ Your benchmark can take in multiple arguments. Just be sure to parse those argum
 ## TODO List
 
 - [x] Model in-device parallelism. For each volume, there is a submission queue (See `cache/cache-vol.c` and `core/core-vol.c`). Currently, it processes requests one at a time. However, it should process requests at a parallelism degree of the SSD's number of packages (channels).
-- [x] Multi-factor cache mode with different write-allocation policies: Write-Around, Write-Back, and perhaps Write-Invalidate
-- [ ] More sophisticated benchmarking logic in `workload/...`.
-- [ ] Porting the `mf` cache mode to Open CAS Linux: Need to ensure that it is implemented in a kernel-safe way. (Currently it is not 100% safe - for example, it directly uses `pthread_create()` and `malloc()`.)
+- [x] Multi-factor cache mode with different write-allocation policies: Write-Around, Write-Back, and Write-Through
+- [x] Refactor and modularize the benchmarking part.
+- [ ] More benchmarking logics in `bench/...`.
+- [ ] Porting the `mf` cache mode to Open CAS Linux: Need to ensure that it is implemented in a kernel-safe way.
 - [ ] Better ways of measuring throughput? Currently, each backend keeps a log of finished requests (See `cache/cache-obj.c` and `core/core-obj.c`).
 
 
