@@ -19,7 +19,7 @@
 #include "../../../src/engine/mf_monitor.h"
 
 
-// Proportion of reads.
+/** Proportion of reads. */
 // double proportion_reads = 1.0;
 double proportion_reads = 0.95;
 // double proportion_reads = 0.5;
