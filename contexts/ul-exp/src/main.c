@@ -82,27 +82,33 @@ static benchmark_t bench_funcs[] = {
 /**
  * Controlling global time in ms. Assumes Intel CPU.
  */
-static uint64_t boot_cpu_cycle;
+// static uint64_t boot_cpu_cycle;
 
-static inline uint64_t
-rdtsc()
-{
-    uint32_t lo, hi;
-    __asm__ __volatile__ (
-      "xorl %%eax, %%eax\n"
-      "cpuid\n"
-      "rdtsc\n"
-      : "=a" (lo), "=d" (hi)
-      :
-      : "%ebx", "%ecx");
-    return (uint64_t) hi << 32 | lo;
-}
+// static inline uint64_t
+// rdtsc()
+// {
+//     uint32_t lo, hi;
+//     __asm__ __volatile__ (
+//       "xorl %%eax, %%eax\n"
+//       "cpuid\n"
+//       "rdtsc\n"
+//       : "=a" (lo), "=d" (hi)
+//       :
+//       : "%ebx", "%ecx");
+//     return (uint64_t) hi << 32 | lo;
+// }
+
+static struct timespec boot_timespec;
 
 double
 get_cur_time_ms()
 {
-    uint64_t cur_cpu_cycle = rdtsc();
-    return (cur_cpu_cycle - boot_cpu_cycle) / (cpu_freq_mhz * 1000);
+    struct timespec cur_timespec;
+
+    clock_gettime(CLOCK_REALTIME, &cur_timespec);
+
+    return (cur_timespec.tv_sec - boot_timespec.tv_sec) * 1000.0
+           + (cur_timespec.tv_nsec - boot_timespec.tv_nsec) / 1000000.0;
 }
 
 
@@ -233,28 +239,28 @@ _print_statistics(struct ocf_stats_usage *stats_usage,
 /**
  * Read the `/proc/cpuinfo` virtual file for CPU frequency.
  */
-static void
-_read_cpu_frequency()
-{
-    char *line = NULL;
-    size_t len = 0;
-    ssize_t rlen = 0;
+// static void
+// _read_cpu_frequency()
+// {
+//     char *line = NULL;
+//     size_t len = 0;
+//     ssize_t rlen = 0;
 
-    FILE *fcpu = fopen("/proc/cpuinfo", "r");
-    if (fcpu == NULL)
-        error("Cannot open `/proc/cpuinfo`", 1);
+//     FILE *fcpu = fopen("/proc/cpuinfo", "r");
+//     if (fcpu == NULL)
+//         error("Cannot open `/proc/cpuinfo`", 1);
 
-    while ((rlen = getline(&line, &len, fcpu)) != -1) {
-        if (rlen > 7 && (! strncmp(line, "cpu MHz", 7))) {
-            sscanf(line, "cpu MHz         : %lf\n", &cpu_freq_mhz);
-            break;
-        }
-    }
+//     while ((rlen = getline(&line, &len, fcpu)) != -1) {
+//         if (rlen > 7 && (! strncmp(line, "cpu MHz", 7))) {
+//             sscanf(line, "cpu MHz         : %lf\n", &cpu_freq_mhz);
+//             break;
+//         }
+//     }
 
-    if (cpu_freq_mhz <= 0.0)
-        error("Invalid CPU frequency MHz number", 1);
-    printf("  CPU frequency: %.3lf MHz\n", cpu_freq_mhz);
-}
+//     if (cpu_freq_mhz <= 0.0)
+//         error("Invalid CPU frequency MHz number", 1);
+//     printf("  CPU frequency: %.3lf MHz\n", cpu_freq_mhz);
+// }
 
 /**
  * Read cache and core device config files.
@@ -467,7 +473,13 @@ main(int argc, char *argv[])
     }
 
     /** Get CPU frequency for timing purpose. */
-    _read_cpu_frequency();
+    // _read_cpu_frequency();
+
+    /** Record RDTSC at boot time. */
+    // boot_cpu_cycle = rdtsc();
+
+    /** Set boot timespec. */
+    clock_gettime(CLOCK_REALTIME, &boot_timespec);
 
     /** Read device config files. */
     _read_cache_device_config();
@@ -481,9 +493,6 @@ main(int argc, char *argv[])
     /** Logging locations. */
     fdevice  = fopen("logs/log-device.txt" , "w+");
     fmonitor = fopen("logs/log-monitor.txt", "w+");
-
-    /** Record RDTSC at boot time. */
-    boot_cpu_cycle = rdtsc();
 
     /** 1. Initialize OCF context. */
     ret = simfs_ctx_init(&ctx);
