@@ -85,7 +85,7 @@ monitor_query_load_admit()
 static const double WAIT_STABLE_THRESHOLD = 0.0015;
 
 /** Sleep X microseconds when detecting cache stability. */
-static const int WAIT_STABLE_SLEEP_INTERVAL_US = 1000000;
+static const int WAIT_STABLE_SLEEP_INTERVAL_US = 100000;
 
 /** Consider workload change when miss ratio > BASE_RATIO + X. */
 static const double WORKLOAD_CHANGE_THRESHOLD = 0.2;
@@ -94,7 +94,7 @@ static const double WORKLOAD_CHANGE_THRESHOLD = 0.2;
 static const double LOAD_ADMIT_TUNING_STEP = 0.01;
 
 /** Measure throughput for a `load_admit` value for X microseconds. */
-static const int MEASURE_THROUGHPUT_INTERVAL_US = 250000;
+static const int MEASURE_THROUGHPUT_INTERVAL_US = 25000;
 
 /**
  * Query the stat component for read (partial + full) miss ratio info.

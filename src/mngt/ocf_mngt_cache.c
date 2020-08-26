@@ -373,7 +373,6 @@ static int _ocf_mngt_init_instance_add_cores(
 	ocf_core_id_t core_id;
 	int ret = -1;
 	uint64_t hd_lines = 0;
-	uint64_t length;
 
 	OCF_ASSERT_PLUGGED(cache);
 
@@ -440,15 +439,8 @@ static int _ocf_mngt_init_instance_add_cores(
 
 		ocf_core_seq_cutoff_init(core);
 
-		length = ocf_volume_get_length(&core->volume);
-		if (length != core->conf_meta->length) {
-			ocf_cache_log(cache, log_err,
-					"Size of core volume doesn't match with"
-					" the size stored in cache metadata!");
-			goto err;
-		}
-
-		hd_lines = ocf_bytes_2_lines(cache, length);
+		hd_lines = ocf_bytes_2_lines(cache,
+				ocf_volume_get_length(&core->volume));
 
 		if (hd_lines) {
 			ocf_cache_log(cache, log_info,
@@ -1043,9 +1035,11 @@ static void _ocf_mngt_init_instance_init(struct ocf_cache_attach_context *contex
 	ocf_pipeline_next(context->pipeline);
 }
 
-uint64_t _ocf_mngt_calculate_ram_needed(ocf_cache_line_size_t line_size,
-		uint64_t volume_size)
+uint64_t _ocf_mngt_calculate_ram_needed(ocf_cache_t cache,
+		ocf_volume_t cache_volume)
 {
+	ocf_cache_line_size_t line_size = ocf_line_size(cache);
+	uint64_t volume_size = ocf_volume_get_length(cache_volume);
 	uint64_t const_data_size;
 	uint64_t cache_line_no;
 	uint64_t data_per_line;
@@ -1071,8 +1065,6 @@ int ocf_mngt_get_ram_needed(ocf_cache_t cache,
 {
 	ocf_volume_t volume;
 	ocf_volume_type_t type;
-	ocf_cache_line_size_t line_size;
-	uint64_t volume_size;
 	int result;
 
 	OCF_CHECK_NULL(cache);
@@ -1094,9 +1086,7 @@ int ocf_mngt_get_ram_needed(ocf_cache_t cache,
 		return result;
 	}
 
-	line_size = ocf_line_size(cache);
-	volume_size = ocf_volume_get_length(volume);
-	*ram_needed = _ocf_mngt_calculate_ram_needed(line_size, volume_size);
+	*ram_needed = _ocf_mngt_calculate_ram_needed(cache, volume);
 
 	ocf_volume_close(volume);
 	ocf_volume_destroy(volume);
@@ -1289,12 +1279,11 @@ static void _ocf_mngt_attach_check_ram(ocf_pipeline_t pipeline,
 {
 	struct ocf_cache_attach_context *context = priv;
 	ocf_cache_t cache = context->cache;
-	ocf_cache_line_size_t line_size = context->metadata.line_size;
-	uint64_t volume_size = ocf_volume_get_length(&cache->device->volume);
 	uint64_t min_free_ram;
 	uint64_t free_ram;
 
-	min_free_ram = _ocf_mngt_calculate_ram_needed(line_size, volume_size);
+	min_free_ram = _ocf_mngt_calculate_ram_needed(cache,
+			&cache->device->volume);
 
 	free_ram = env_get_free_memory();
 
@@ -1538,8 +1527,8 @@ struct ocf_pipeline_properties _ocf_mngt_cache_attach_pipeline_properties = {
 	.finish = _ocf_mngt_cache_attach_finish,
 	.steps = {
 		OCF_PL_STEP(_ocf_mngt_attach_cache_device),
-		OCF_PL_STEP(_ocf_mngt_attach_load_properties),
 		OCF_PL_STEP(_ocf_mngt_attach_check_ram),
+		OCF_PL_STEP(_ocf_mngt_attach_load_properties),
 		OCF_PL_STEP(_ocf_mngt_attach_prepare_metadata),
 		OCF_PL_STEP(_ocf_mngt_test_volume),
 		OCF_PL_STEP(_ocf_mngt_attach_load_superblock),
@@ -1609,7 +1598,7 @@ static void _ocf_mngt_cache_stop_remove_cores(ocf_cache_t cache, bool attached)
 		cache_mngt_core_remove_from_cache(core);
 		if (attached)
 			cache_mngt_core_remove_from_cleaning_pol(core);
-		cache_mngt_core_deinit(core);
+		cache_mngt_core_close(core);
 		if (--no == 0)
 			break;
 	}

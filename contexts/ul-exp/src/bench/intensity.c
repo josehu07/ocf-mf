@@ -19,6 +19,13 @@
 #include "../../../src/engine/mf_monitor.h"
 
 
+// Proportion of reads.
+// double proportion_reads = 1.0;
+double proportion_reads = 0.95;
+// double proportion_reads = 0.5;
+// double proportion_reads = 0.0;
+
+
 // Exposed for device logging.
 double base_time_ms = 0.0;
 
@@ -32,6 +39,9 @@ write_cmpl_callback(struct ocf_io *io, int error)
     if (error != 0)
         DEBUG("WR COMPLETE: error = %d", error);
 
+    simfs_data_t *data = ocf_io_get_data(io);
+    simfs_data_free(data);
+
     ocf_io_put(io);
 }
 
@@ -40,6 +50,9 @@ read_cmpl_callback(struct ocf_io *io, int error)
 {
     if (error != 0)
         DEBUG("RD COMPLETE: error = %d", error);
+
+    simfs_data_t *data = ocf_io_get_data(io);
+    simfs_data_free(data);
 
     ocf_io_put(io);
 }
@@ -142,17 +155,29 @@ submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
 }
 
 static int
-submit_10_ios_in_a_row(ocf_core_t core, simfs_data_t *simfs_data,
-                       ocf_end_io_t callback_func)
+submit_10_ios_in_a_row(ocf_core_t core)
 {
     int i, ret;
 
     for (i = 0; i < 10; ++i) {
-        int dir = OCF_READ;
+        int dir;
+
+        if ((((double) rand()) / ((double) RAND_MAX)) < proportion_reads)
+            dir = OCF_READ;
+        else
+            dir = OCF_WRITE;
+
         uint32_t size = PAGE_SIZE;
         uint64_t addr = which_page_workload_small() * PAGE_SIZE;
 
-        ret = submit_io(core, simfs_data, addr, size, dir, callback_func);
+        simfs_data_t *data = simfs_data_alloc(1);
+
+        DEBUG("ISSUE: dir = %s, core pos = 0x%08lx, len = %u",
+              dir == OCF_WRITE ? "WR <-" : "RD ->", addr, size);
+
+        ret = submit_io(core, data, addr, size, dir,
+                        dir == OCF_READ ? read_cmpl_callback
+                                        : write_cmpl_callback);
         if (ret)
             return ret;
     }
@@ -189,7 +214,6 @@ bench_intensity(ocf_core_t core, int num_args, char **bench_args)
         return -2;
     }
 
-    simfs_data_t *data = simfs_data_alloc(1);
     int ret;
 
     /**
@@ -234,7 +258,7 @@ bench_intensity(ocf_core_t core, int num_args, char **bench_args)
             log_interval_ms = 0.0;
         }
 
-        ret = submit_10_ios_in_a_row(core, data, read_cmpl_callback);
+        ret = submit_10_ios_in_a_row(core);
         if (ret)
             return ret;
 
@@ -275,7 +299,7 @@ bench_intensity(ocf_core_t core, int num_args, char **bench_args)
             log_interval_ms = 0.0;
         }
 
-        ret = submit_10_ios_in_a_row(core, data, read_cmpl_callback);
+        ret = submit_10_ios_in_a_row(core);
         if (ret)
             return ret;
 
@@ -316,7 +340,7 @@ bench_intensity(ocf_core_t core, int num_args, char **bench_args)
             log_interval_ms = 0.0;
         }
 
-        ret = submit_10_ios_in_a_row(core, data, read_cmpl_callback);
+        ret = submit_10_ios_in_a_row(core);
         if (ret)
             return ret;
 
@@ -359,8 +383,6 @@ bench_intensity(ocf_core_t core, int num_args, char **bench_args)
     /** Force device volume submission threads to stop. */
     cache_vol_force_stop();
     core_vol_force_stop();
-
-    simfs_data_free(data);
 
     return 0;
 }

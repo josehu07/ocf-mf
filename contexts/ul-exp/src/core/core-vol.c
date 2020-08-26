@@ -61,7 +61,8 @@ static const int FLASHSIM_DIR_WRITE = 1;
 /** This lock protects the FlashSim socket file. */
 static env_mutex core_device_sock_lock;
 
-/** This RW lock ensures requests sequentiality. */
+/** These ensure requests sequentiality. */
+static env_mutex core_sequentiality_guard;
 static env_rwlock core_sequentiality_lock;
 
 
@@ -208,11 +209,14 @@ _submit_thread_func(void *args)
             return NULL;    // Not reached.
         }
 
+        env_mutex_lock(&core_sequentiality_guard);
+
         /** Extract an entry from queue head. */
         env_mutex_lock(&submit_queue_lock);
 
         if (list_empty(&submit_queue.head)) {
             env_mutex_unlock(&submit_queue_lock);
+            env_mutex_unlock(&core_sequentiality_guard);
             continue;
         }
 
@@ -222,6 +226,8 @@ _submit_thread_func(void *args)
 
         list_del(&entry->head);
         free(entry);
+
+        env_mutex_unlock(&submit_queue_lock);
 
         /**
          * If is a write, acquire the writer-side lock here. This ensures
@@ -241,31 +247,34 @@ _submit_thread_func(void *args)
             break;
         }
 
-        env_mutex_unlock(&submit_queue_lock);
+        env_mutex_unlock(&core_sequentiality_guard);
 
         /** Process the request. */
         core_vol_priv_t *vol_priv = ocf_volume_get_priv(ocf_io_get_volume(io));
 
-        // DEBUG("IO: dir = %s, core pos = 0x%08lx, len = %u",
-        //       io->dir == OCF_WRITE ? "WR <-" : "RD ->", io->addr, io->bytes);
+        DEBUG("IO: dir = %s, core pos = 0x%08lx, len = %u",
+              io->dir == OCF_WRITE ? "WR <-" : "RD ->", io->addr, io->bytes);
 
         switch (io->dir) {
         case OCF_WRITE:
             _submit_write_io(io, vol_priv->sock_fd, start_time_ms);
+
+            core_log_push_entry(pkg, start_time_ms, get_cur_time_ms(),
+                                io->bytes);
+            io->end(io, 0);
+
             env_rwlock_write_unlock(&core_sequentiality_lock);
             break;
         case OCF_READ:
             _submit_read_io(io, vol_priv->sock_fd, start_time_ms);
+
+            core_log_push_entry(pkg, start_time_ms, get_cur_time_ms(),
+                                io->bytes);
+            io->end(io, 0);
+
             env_rwlock_read_unlock(&core_sequentiality_lock);
             break;
         }
-
-        if (io->dir == OCF_READ) {
-            core_log_push_entry(pkg, start_time_ms, get_cur_time_ms(),
-                                io->bytes);
-        }
-
-        io->end(io, 0);
     }
 
     // Not reached.
@@ -330,6 +339,12 @@ core_vol_open(ocf_volume_t core_vol, void *params)
     }
 
     /** Initialize sequentiality lock. */
+    ret = env_mutex_init(&core_sequentiality_guard);
+    if (ret) {
+        DEBUG("OPEN: core sequentiality guard initialization failed");
+        return ret;
+    }
+
     env_rwlock_init(&core_sequentiality_lock);
 
     env_atomic_set(&should_stop, 0);
@@ -388,6 +403,7 @@ core_vol_close(ocf_volume_t core_vol)
 
     env_mutex_destroy(&core_device_sock_lock);
 
+    env_mutex_destroy(&core_sequentiality_guard);
     env_rwlock_destroy(&core_sequentiality_lock);
 }
 
@@ -547,24 +563,23 @@ void
 core_vol_force_stop()
 {
     struct req_entry *entry;
-    struct ocf_io *io;
+    int i;
 
     env_mutex_lock(&submit_queue_lock);
 
     while (! list_empty(&submit_queue.head)) {
         entry = list_first_entry(&submit_queue.head,
                                  struct req_entry, head);
-        io = entry->io;
-
         list_del(&entry->head);
         free(entry);
-
-        io->end(io, 0);
     }
 
-    env_mutex_unlock(&submit_queue_lock);
-
     env_atomic_inc(&should_stop);
+
+    for (i = 0; i < core_parallelism; ++i)
+        env_completion_complete(&submit_queue_sem);
+
+    env_mutex_unlock(&submit_queue_lock);
 }
 
 

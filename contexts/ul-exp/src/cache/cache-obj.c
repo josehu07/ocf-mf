@@ -202,6 +202,7 @@ cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache,
      * as CACHE_VOL_TYPE.
      */
     ocf_mngt_cache_device_config_set_default(&device_cfg);
+    device_cfg.cache_line_size = ocf_cache_line_size_4;
     device_cfg.volume_type = CACHE_VOL_TYPE;
     device_cfg.perform_test = false;
     ret = ocf_uuid_set_str(&device_cfg.uuid, "cache");

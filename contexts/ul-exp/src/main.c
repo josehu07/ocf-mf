@@ -539,21 +539,21 @@ main(int argc, char *argv[])
                       &stats_blocks, &stats_errors);
 
     /** 9. Stop and detach core from cache. */
-    ret = core_obj_stop(core);
-    if (ret)
-        error("Unable to stop core", ret);
+    // ret = core_obj_stop(core);
+    // if (ret)
+    //     error("Unable to stop core", ret);
 
     /** 10. Stop the cache. */
-    ret = cache_obj_stop(cache);
-    if (ret)
-        error("Unable to stop cache", ret);
+    // ret = cache_obj_stop(cache);
+    // if (ret)
+    //     error("Unable to stop cache", ret);
 
     /** 11. Unregister volume types. */
-    core_vol_unregister(ctx);
-    cache_vol_unregister(ctx);
+    // core_vol_unregister(ctx);
+    // cache_vol_unregister(ctx);
 
     /** 12. Cleanup this context. */
-    simfs_ctx_cleanup(ctx);
+    // simfs_ctx_cleanup(ctx);
 
     fclose(fdevice);
     fclose(fmonitor);
