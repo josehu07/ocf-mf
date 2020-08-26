@@ -14,16 +14,17 @@
 #include "core/core-obj.h"
 #include "core/core-vol.h"
 #include "common.h"
-#include "intensity.h"
+#include "throughput.h"
 
 #include "../../../src/engine/mf_monitor.h"
 
 
-/** Proportion of reads. */
-// double proportion_reads = 1.0;
-double proportion_reads = 0.95;
-// double proportion_reads = 0.5;
-// double proportion_reads = 0.0;
+static void
+error(const char *msg, int error)
+{
+    fprintf(stderr, "ERROR: %s, code = %d\n", msg, error);
+    exit(1);
+}
 
 
 // Exposed for device logging.
@@ -89,8 +90,10 @@ _get_core_throughput(double begin_time_ms, double end_time_ms)
 /**
  * Define a workload - choosing a page.
  */
+typedef int (*workload_func_t) (void);
+
 static int
-which_page_workload_small()
+which_page_workload_99()
 {
     const int cache_capacity = cache_capacity_bytes / PAGE_SIZE;
     const int workload_size = (int) (0.1 * cache_capacity);
@@ -98,31 +101,23 @@ which_page_workload_small()
     return rand() % workload_size;
 }
 
-// static int
-// which_page_workload_1st()
-// {
-//     const int cache_capacity = cache_capacity_bytes / PAGE_SIZE;
-//     const int workload_size = (int) (1.25 * cache_capacity);
+static int
+which_page_workload_95()
+{
+    const int cache_capacity = cache_capacity_bytes / PAGE_SIZE;
+    const int workload_size = (int) (1.0526 * cache_capacity);
 
-//     if (rand() % 100 < 95)
-//         return rand() % cache_capacity;
-//     else
-//         return cache_capacity + (rand() % (workload_size - cache_capacity));
-// }
+    return rand() % workload_size;
+}
 
-// static int
-// which_page_workload_2nd()
-// {
-//     const int core_capacity = core_capacity_bytes / PAGE_SIZE;
-//     const int cache_capacity = cache_capacity_bytes / PAGE_SIZE;
-//     const int workload_size = (int) (1.25 * cache_capacity);
+static int
+which_page_workload_80()
+{
+    const int cache_capacity = cache_capacity_bytes / PAGE_SIZE;
+    const int workload_size = (int) (1.25 * cache_capacity);
 
-//     if (rand() % 100 < 95)
-//         return core_capacity - rand() % cache_capacity - 1;
-//     else
-//         return core_capacity - workload_size - 1
-//                + (rand() % (workload_size - cache_capacity));
-// }
+    return rand() % workload_size;
+}
 
 
 /**
@@ -155,7 +150,8 @@ submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
 }
 
 static int
-submit_10_ios_in_a_row(ocf_core_t core)
+submit_10_ios_in_a_row(ocf_core_t core, double proportion_reads,
+                       workload_func_t workload_func)
 {
     int i, ret;
 
@@ -168,7 +164,7 @@ submit_10_ios_in_a_row(ocf_core_t core)
             dir = OCF_WRITE;
 
         uint32_t size = PAGE_SIZE;
-        uint64_t addr = which_page_workload_small() * PAGE_SIZE;
+        uint64_t addr = workload_func() * PAGE_SIZE;
 
         simfs_data_t *data = simfs_data_alloc(1);
 
@@ -186,35 +182,72 @@ submit_10_ios_in_a_row(ocf_core_t core)
 }
 
 
-int
-bench_intensity(ocf_core_t core, int num_args, char **bench_args)
+/**
+ * Prompt usage and return with error.
+ */
+static inline void
+prompt_usage_exit()
 {
-    int intensity;
-    
-    if (num_args != 1) {
-        fprintf(stderr, "Wrong number of arguments\n");
-        return -1;
+    fprintf(stderr, "Throughput benchmarking usage:\n"
+                    "  ./bench <mode> throughput <intensity> "
+                    "<reads_percentage> <hit_ratio>\n"
+                    "Where:\n"
+                    "  mode := pt|wa|wb|wt|mfwa|mfwb|mfwt\n"
+                    "  intensity must be a multiple of 10\n"
+                    "  reads_percentage := 100|95|50\n"
+                    "  hit_ratio := 99|95|80\n");
+    exit(1);
+}
+
+
+int
+bench_throughput(ocf_core_t core, int num_args, char **bench_args)
+{
+    /** Must have ENABLE_DATA == false when doing this benchmarking. */
+    if (flashsim_enable_data) {
+        error("Recommend having PAGE_ENABLE_DATA option off when "
+              "benchmarking.\n", -1);
     }
 
+    int intensity, reads_percentage, hit_ratio, ret;
+    double proportion_reads;
+    workload_func_t workload_func;
+    
+    if (num_args != 3)
+        prompt_usage_exit();
+
     intensity = (int) strtol(bench_args[0], NULL, 10);
+    reads_percentage = (int) strtol(bench_args[1], NULL, 10);
+    hit_ratio = (int) strtol(bench_args[2], NULL, 10);
+
+    /** Intensity must be a multiple of 10. */
+    if (intensity % 10 != 0)
+        prompt_usage_exit();
+
+    /** Read percentage := 100% | 95% | 50%. */
+    if (reads_percentage == 100)
+        proportion_reads = 1.0;
+    else if (reads_percentage == 95)
+        proportion_reads = 0.95;
+    else if (reads_percentage == 50)
+        proportion_reads = 0.5;
+    else
+        prompt_usage_exit();
+
+    /** Hit ratio := 99%, 95%, 80%. */
+    if (hit_ratio == 99)
+        workload_func = which_page_workload_99;
+    else if (hit_ratio == 95)
+        workload_func = which_page_workload_95;
+    else if (hit_ratio == 80)
+        workload_func = which_page_workload_80;
+    else
+        prompt_usage_exit();
 
     printf("\nExperiment parameters:\n\n");
     printf("  Intensity: %d 4KiB-Reqs/s\n", intensity);
-
-    /** Must have ENABLE_DATA == false when doing this benchmarking. */
-    if (flashsim_enable_data) {
-        fprintf(stderr, "Recommend having PAGE_ENABLE_DATA option off "
-                        "when benchmarking.\n");
-        return -1;
-    }
-
-    /** Intensity must be a multiple of 10. */
-    if (intensity % 10 != 0) {
-        fprintf(stderr, "Intensity must be a multiple of 10.\n");
-        return -2;
-    }
-
-    int ret;
+    printf("  Reads percentage: %d%%\n", reads_percentage);
+    printf("  Approx hit ratio: %d%%\n", hit_ratio);
 
     /**
      * We will issue 10 requests in a row every time the benchmarking code
@@ -258,7 +291,7 @@ bench_intensity(ocf_core_t core, int num_args, char **bench_args)
             log_interval_ms = 0.0;
         }
 
-        ret = submit_10_ios_in_a_row(core);
+        ret = submit_10_ios_in_a_row(core, proportion_reads, workload_func);
         if (ret)
             return ret;
 
@@ -299,7 +332,7 @@ bench_intensity(ocf_core_t core, int num_args, char **bench_args)
             log_interval_ms = 0.0;
         }
 
-        ret = submit_10_ios_in_a_row(core);
+        ret = submit_10_ios_in_a_row(core, proportion_reads, workload_func);
         if (ret)
             return ret;
 
@@ -340,7 +373,7 @@ bench_intensity(ocf_core_t core, int num_args, char **bench_args)
             log_interval_ms = 0.0;
         }
 
-        ret = submit_10_ios_in_a_row(core);
+        ret = submit_10_ios_in_a_row(core, proportion_reads, workload_func);
         if (ret)
             return ret;
 

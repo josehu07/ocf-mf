@@ -66,15 +66,15 @@ error(const char *msg, int error)
  */
 typedef int (*benchmark_t) (ocf_core_t, int, char **);
 
-#include "bench/intensity.h"
+#include "bench/throughput.h"
 
 static char *bench_names[] = {
-    "intensity",
+    "throughput",
     "MAX_BENCH_NAME",
 };
 
 static benchmark_t bench_funcs[] = {
-    bench_intensity,
+    bench_throughput,
     NULL,
 };
 

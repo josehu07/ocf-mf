@@ -13,8 +13,6 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "bench/intensity.h"
-
 
 extern FILE *fdevice;
 extern FILE *fmonitor;

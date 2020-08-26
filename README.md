@@ -103,20 +103,20 @@ Then, in yet another shell:
 
 ```bash
 # In shell 3:
-$ ./bench <mode> <bench_name> [bench_args]  # E.g., ./bench mfwa intensity 12000
+$ ./bench <mode> <bench_name> [bench_args]  # E.g., ./bench mfwa throughput 12000 100 99
 Where:
     mode := pt|wa|wb|wt|mfwa|mfwb|mfwt
     bench_name & bench_args are defined by benchmarks
 ```
 
-The exact way of invoking `./bench` on experiments depends on the benchmarks code. The above example is for intensity experiments.
+The exact way of invoking `./bench` on experiments depends on the benchmarks code. The above example is for throughput experiments.
 
 ### Adding a New Benchmark
 
 To add a new benchmarking experiment called `new_bench` for example, do:
 
-1. Navigate to the folder `contexts/ul-exp/src/bench/`. There you will find benchmarking experiments implementation. Add `new_bench.c` & `new_bench.h` there. (Follow `intensity.c` & `intensity.h` as a guidance.)
-2. In `contexts/ul-exp/src/main.c`, find the arrays `bench_names` and `bench_funcs` at the top. Add your new benchmark in. (Follow the `intensity` benchmark as a guidance.)
+1. Navigate to the folder `contexts/ul-exp/src/bench/`. There you will find benchmarking experiments implementation. Add `new_bench.c` & `new_bench.h` there. (Follow `throughput.c` & `throughput.h` as a guidance.)
+2. In `contexts/ul-exp/src/main.c`, find the arrays `bench_names` and `bench_funcs` at the top. Add your new benchmark in. (Follow the `throughput` benchmark as a guidance.)
 
 Your benchmark can take in multiple arguments. Just be sure to parse those arguments correctly in your benchmarking function.
 

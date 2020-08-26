@@ -8,9 +8,17 @@ do
     for i in {10000..25000..1000}
     do
         echo "  intensity $i ..."
-        
-        ./bench ${MODE} intensity $i > result/result-$i-${MODE}.txt
 
-        sleep 5
+        while true; do
+            sleep 5
+
+            timeout 300s ./bench ${MODE} throughput $i > result/result-$i-${MODE}.txt
+
+            if [[ $? -eq 0 ]]; then
+                break
+            else
+                echo "    retrying ..."
+            fi
+        done
     done
 done
