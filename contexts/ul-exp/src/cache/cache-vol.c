@@ -59,11 +59,11 @@ static const int FLASHSIM_DIR_WRITE = 1;
 
 
 /** This lock protects the FlashSim socket file. */
-static env_mutex cache_device_sock_lock;
+// static env_mutex cache_device_sock_lock;
 
 /** These ensure requests sequentiality. */
-static env_mutex cache_sequentiality_guard;
-static env_rwlock cache_sequentiality_lock;
+// static env_mutex cache_sequentiality_guard;
+// static env_rwlock cache_sequentiality_lock;
 
 
 /**
@@ -86,12 +86,12 @@ _submit_write_io(struct ocf_io *io, int sock_fd, double start_time_ms)
     header.start_time_us = (uint64_t) (1000 * start_time_ms);
 
     /** Critical section: ensuring the three messages are always in order. */
-    env_mutex_lock(&cache_device_sock_lock);
+    // env_mutex_lock(&cache_device_sock_lock);
 
     wbytes = write(sock_fd, &header, REQ_HEADER_LENGTH);
     if (wbytes != REQ_HEADER_LENGTH) {
         DEBUG("IO: write request header send failed");
-        env_mutex_unlock(&cache_device_sock_lock);
+        // env_mutex_unlock(&cache_device_sock_lock);
         return 1;
     }
 
@@ -101,7 +101,7 @@ _submit_write_io(struct ocf_io *io, int sock_fd, double start_time_ms)
                        header.size);
         if (wbytes != (int) header.size) {
             DEBUG("IO: write request data send failed");
-            env_mutex_unlock(&cache_device_sock_lock);
+            // env_mutex_unlock(&cache_device_sock_lock);
             return 2;
         }
     }
@@ -110,11 +110,11 @@ _submit_write_io(struct ocf_io *io, int sock_fd, double start_time_ms)
     rbytes = read(sock_fd, &time_used_us, 8);
     if (rbytes != 8) {
         DEBUG("IO: write processing time recv failed");
-        env_mutex_unlock(&cache_device_sock_lock);
+        // env_mutex_unlock(&cache_device_sock_lock);
         return 3;
     }
 
-    env_mutex_unlock(&cache_device_sock_lock);
+    // env_mutex_unlock(&cache_device_sock_lock);
     /** Critical section ends. */
 
     usleep(time_used_us);   /** Simulate latency here. */
@@ -143,12 +143,12 @@ _submit_read_io(struct ocf_io *io, int sock_fd, double start_time_ms)
     header.start_time_us = (uint64_t) (1000 * start_time_ms);
 
     /** Critical section: ensuring the three messages are always in order. */
-    env_mutex_lock(&cache_device_sock_lock);
+    // env_mutex_lock(&cache_device_sock_lock);
 
     wbytes = write(sock_fd, &header, REQ_HEADER_LENGTH);
     if (wbytes != REQ_HEADER_LENGTH) {
         DEBUG("IO: read request header send failed");
-        env_mutex_unlock(&cache_device_sock_lock);
+        // env_mutex_unlock(&cache_device_sock_lock);
         return 1;
     }
 
@@ -158,7 +158,7 @@ _submit_read_io(struct ocf_io *io, int sock_fd, double start_time_ms)
                       header.size);
         if (rbytes != (int) header.size) {
             DEBUG("IO: read request data recv failed");
-            env_mutex_unlock(&cache_device_sock_lock);
+            // env_mutex_unlock(&cache_device_sock_lock);
             return 2;
         }
     }
@@ -167,11 +167,11 @@ _submit_read_io(struct ocf_io *io, int sock_fd, double start_time_ms)
     rbytes = read(sock_fd, &time_used_us, 8);
     if (rbytes != 8) {
         DEBUG("IO: read processing time recv failed");
-        env_mutex_unlock(&cache_device_sock_lock);
+        // env_mutex_unlock(&cache_device_sock_lock);
         return 3;
     }
 
-    env_mutex_unlock(&cache_device_sock_lock);
+    // env_mutex_unlock(&cache_device_sock_lock);
     /** Critical section ends. */
 
     usleep(time_used_us);   /** Simulate latency here. */
@@ -209,14 +209,14 @@ _submit_thread_func(void *args)
             return NULL;    // Not reached.
         }
 
-        env_mutex_lock(&cache_sequentiality_guard);
+        // env_mutex_lock(&cache_sequentiality_guard);
 
         /** Extract an entry from queue head. */
         env_mutex_lock(&submit_queue_lock);
 
         if (list_empty(&submit_queue.head)) {
             env_mutex_unlock(&submit_queue_lock);
-            env_mutex_unlock(&cache_sequentiality_guard);
+            // env_mutex_unlock(&cache_sequentiality_guard);
             continue;
         }
 
@@ -238,16 +238,16 @@ _submit_thread_func(void *args)
          * If is a read, acquire the reader-side lock here. This allows
          * concurrent reads when no writes are in process.
          */
-        switch (io->dir) {
-        case OCF_WRITE:
-            env_rwlock_write_lock(&cache_sequentiality_lock);
-            break;
-        case OCF_READ:
-            env_rwlock_read_lock(&cache_sequentiality_lock);
-            break;
-        }
+        // switch (io->dir) {
+        // case OCF_WRITE:
+        //     env_rwlock_write_lock(&cache_sequentiality_lock);
+        //     break;
+        // case OCF_READ:
+        //     env_rwlock_read_lock(&cache_sequentiality_lock);
+        //     break;
+        // }
 
-        env_mutex_unlock(&cache_sequentiality_guard);
+        // env_mutex_unlock(&cache_sequentiality_guard);
 
         /** Process the request. */
         cache_vol_priv_t *vol_priv = ocf_volume_get_priv(ocf_io_get_volume(io));
@@ -263,7 +263,7 @@ _submit_thread_func(void *args)
                                  io->bytes);
             io->end(io, 0);
 
-            env_rwlock_write_unlock(&cache_sequentiality_lock);
+            // env_rwlock_write_unlock(&cache_sequentiality_lock);
             break;
         case OCF_READ:
             _submit_read_io(io, vol_priv->sock_fd, start_time_ms);
@@ -272,7 +272,7 @@ _submit_thread_func(void *args)
                              io->bytes);
             io->end(io, 0);
 
-            env_rwlock_read_unlock(&cache_sequentiality_lock);
+            // env_rwlock_read_unlock(&cache_sequentiality_lock);
             break;
         }
     }
@@ -332,20 +332,20 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
     env_completion_init(&submit_queue_sem);
 
     /** Initialize device lock. */
-    ret = env_mutex_init(&cache_device_sock_lock);
-    if (ret) {
-        DEBUG("OPEN: cache device lock initialization failed");
-        return ret;
-    }
+    // ret = env_mutex_init(&cache_device_sock_lock);
+    // if (ret) {
+    //     DEBUG("OPEN: cache device lock initialization failed");
+    //     return ret;
+    // }
 
     /** Initialize sequentiality lock. */
-    ret = env_mutex_init(&cache_sequentiality_guard);
-    if (ret) {
-        DEBUG("OPEN: cache sequentiality guard initialization failed");
-        return ret;
-    }
+    // ret = env_mutex_init(&cache_sequentiality_guard);
+    // if (ret) {
+    //     DEBUG("OPEN: cache sequentiality guard initialization failed");
+    //     return ret;
+    // }
 
-    env_rwlock_init(&cache_sequentiality_lock);
+    // env_rwlock_init(&cache_sequentiality_lock);
 
     env_atomic_set(&should_stop, 0);
 
@@ -401,10 +401,10 @@ cache_vol_close(ocf_volume_t cache_vol)
     env_mutex_destroy(&submit_queue_lock);
     env_completion_destroy(&submit_queue_sem);
 
-    env_mutex_destroy(&cache_device_sock_lock);
+    // env_mutex_destroy(&cache_device_sock_lock);
 
-    env_mutex_destroy(&cache_sequentiality_guard);
-    env_rwlock_destroy(&cache_sequentiality_lock);
+    // env_mutex_destroy(&cache_sequentiality_guard);
+    // env_rwlock_destroy(&cache_sequentiality_lock);
 }
 
 // Exposed for device logging.

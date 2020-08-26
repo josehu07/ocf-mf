@@ -276,12 +276,12 @@ _read_cache_device_config()
     if (fcache == NULL)
         error("Cannot open `cache-ssd.conf`", 2);
 
-    uint64_t package_size = 0, die_size = 0, plane_size = 0,
+    uint64_t flash_size = 0, package_size = 0, die_size = 0, plane_size = 0,
              block_size = 0, page_size = 0;
 
     while ((rlen = getline(&line, &len, fcache)) != -1) {
         if (rlen > 8 && (! strncmp(line, "SSD_SIZE", 8)))
-            sscanf(line, "SSD_SIZE %d\n", &cache_parallelism);
+            sscanf(line, "SSD_SIZE %lu\n", &flash_size);
         else if (rlen > 12 && (! strncmp(line, "PACKAGE_SIZE", 12)))
             sscanf(line, "PACKAGE_SIZE %lu\n", &package_size);
         else if (rlen > 8 && (! strncmp(line, "DIE_SIZE", 8)))
@@ -294,11 +294,14 @@ _read_cache_device_config()
             sscanf(line, "PAGE_SIZE %lu\n", &page_size);
     }
 
-    if (cache_parallelism <= 0)
-        error("Invalid cache SSD number of packages", 2);
-    printf("  Cache parallelism: %d\n", cache_parallelism);
+    // cache_parallelism = flash_size;
+    cache_parallelism = 1;
 
-    cache_capacity_bytes = cache_parallelism * package_size * die_size
+    // if (cache_parallelism <= 0)
+    //     error("Invalid cache SSD number of packages", 2);
+    // printf("  Cache parallelism: %d\n", cache_parallelism);
+
+    cache_capacity_bytes = flash_size * package_size * die_size
                            * plane_size * block_size * page_size;
     cache_capacity_bytes = (uint64_t) (cache_capacity_bytes
                                        * 0.125);    /** Only use 1/8. */
@@ -318,12 +321,12 @@ _read_core_device_config()
     if (fcore == NULL)
         error("Cannot open `core-ssd.conf`", 3);
 
-    uint64_t package_size = 0, die_size = 0, plane_size = 0,
+    uint64_t flash_size = 0, package_size = 0, die_size = 0, plane_size = 0,
              block_size = 0, page_size = 0;
 
     while ((rlen = getline(&line, &len, fcore)) != -1) {
         if (rlen > 8 && (! strncmp(line, "SSD_SIZE", 8)))
-            sscanf(line, "SSD_SIZE %d\n", &core_parallelism);
+            sscanf(line, "SSD_SIZE %lu\n", &flash_size);
         else if (rlen > 12 && (! strncmp(line, "PACKAGE_SIZE", 12)))
             sscanf(line, "PACKAGE_SIZE %lu\n", &package_size);
         else if (rlen > 8 && (! strncmp(line, "DIE_SIZE", 8)))
@@ -345,16 +348,19 @@ _read_core_device_config()
         error("Invalid FlashSim page size", 3);
     flashsim_page_size = page_size;
 
-    if (core_parallelism <= 0)
-        error("Invalid core SSD number of packages", 3);
-    printf("  Core parallelism: %d\n", core_parallelism);
+    // core_parallelism = flash_size;
+    core_parallelism = 1;
 
-    core_capacity_bytes = core_parallelism * package_size * die_size
+    // if (core_parallelism <= 0)
+    //     error("Invalid core SSD number of packages", 3);
+    // printf("  Core parallelism: %d\n", core_parallelism);
+
+    core_capacity_bytes = flash_size * package_size * die_size
                           * plane_size * block_size * page_size;
     core_capacity_bytes = (uint64_t) (core_capacity_bytes
                                       * 0.125);     /** Only use 1/8. */
     if (core_capacity_bytes <= 0)
-        error("Invalid cache SSD capacity", 3);
+        error("Invalid core SSD capacity", 3);
     printf("  Core 1/8 capacity: %ld bytes\n", core_capacity_bytes);
 
     printf("  FlashSim page size: %ld bytes\n", flashsim_page_size);

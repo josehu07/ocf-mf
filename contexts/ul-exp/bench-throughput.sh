@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/bash
 
 
 for MODE in pt wa wb wt mfwa mfwb mfwt
