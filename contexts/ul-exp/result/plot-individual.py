@@ -12,7 +12,9 @@ for filename in os.listdir("./"):
 
 
 for filename in resfiles:
-    intensity = filename[filename.find("-")+1:filename.rfind("-")]
+    intensity = filename[filename.find("-int")+4:filename.find("-read")]
+    read_percentage = filename[filename.find("-read")+5:filename.find("-hit")]
+    hit_ratio = filename[filename.find("-hit")+4:filename.rfind("-")]
     mode = filename[filename.rfind("-")+1:filename.find(".txt")]
 
     num_reqs = []
@@ -82,7 +84,8 @@ for filename in resfiles:
 
     ax3.set_xlabel("Time (ms)")
 
-    fig.suptitle("Intensity = "+intensity+" #4K-Reqs/s, mode = "+mode)
+    fig.suptitle("Intensity = "+intensity+" #4K-Reqs/s,\nread percentage = "+read_percentage
+                 +"%, hit ratio = "+hit_ratio+"%, mode = "+mode)
     
-    plt.savefig("result-"+intensity+"-"+mode+".png")
+    plt.savefig("result-int"+intensity+"-read"+read_percentage+"-hit"+hit_ratio+"-"+mode+".png")
     plt.close()
