@@ -12,7 +12,7 @@ for filename in os.listdir("./"):
         resfiles.append(filename)
 
 
-for rp in (100, 95, 50):
+for rp in (100, 95, 50, 0):
     for hr in (99, 95, 80):
 
         avg_load_admits = {}
@@ -65,7 +65,8 @@ for rp in (100, 95, 50):
             # should be given the intensity number, because there is overhead in benchmarking
             # code loop. Doing usleep of delta (= 1 / intensity) will actually give an
             # intensity smaller than what we set.
-            amp_ratio = float(intensity * (160 - 60)) / float(num_reqs[-1])
+            time_length = (times[-1] - times[0]) / 1000
+            amp_ratio = float(intensity * time_length) / float(num_reqs[-1])
 
             # print(mode, amp_ratio)
 

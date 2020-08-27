@@ -1,18 +1,19 @@
 #!/bin/bash
 
 
-INTENSITY=4500
+READ_INTENSITY=10000
+WRITE_INTENSITY=4000
 
 
 echo "Doing cache device throughput measurement..."
 
 
-echo "  Read: WA on intensity ${INTENSITY} with 100% read..."
+echo "  Read: WA on intensity ${READ_INTENSITY} with 100% read..."
 
 while true; do
     sleep 5
 
-    timeout 300s ./bench wa throughput ${INTENSITY} 100 99 > result/measure-read-int${INTENSITY}.txt
+    timeout 300s ./bench wa throughput ${READ_INTENSITY} 100 99 > result/measure-read-int${READ_INTENSITY}.txt
 
     if [[ $? -eq 0 ]]; then
         break
@@ -22,12 +23,12 @@ while true; do
 done
 
 
-echo "  Write: WB on intensity ${INTENSITY} with 0% read..."
+echo "  Write: WB on intensity ${WRITE_INTENSITY} with 0% read..."
 
 while true; do
     sleep 5
 
-    timeout 300s ./bench wb throughput ${INTENSITY} 0 99 > result/measure-write-int${INTENSITY}.txt
+    timeout 300s ./bench wb throughput ${WRITE_INTENSITY} 0 99 > result/measure-write-int${WRITE_INTENSITY}.txt
 
     if [[ $? -eq 0 ]]; then
         break

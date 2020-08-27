@@ -32,7 +32,8 @@ for filename in measurefiles:
     # should be given the intensity number, because there is overhead in benchmarking
     # code loop. Doing usleep of delta (= 1 / intensity) will actually give an
     # intensity smaller than what we set.
-    amp_ratio = float(intensity * (160 - 60)) / float(num_reqs[-1])
+    time_length = (times[-1] - times[0]) / 1000
+    amp_ratio = float(intensity * time_length) / float(num_reqs[-1])
 
     avg_cache_tp = 0
 
