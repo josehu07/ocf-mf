@@ -23,9 +23,6 @@ extern unsigned long flashsim_page_size;
 extern const char *cache_sock_name;
 extern const char *core_sock_name;
 
-extern int cache_parallelism;
-extern int core_parallelism;
-
 extern uint64_t cache_capacity_bytes;
 extern uint64_t core_capacity_bytes;
 

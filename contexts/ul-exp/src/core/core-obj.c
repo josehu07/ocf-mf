@@ -62,18 +62,17 @@ remove_core_callback(void *callback_states, int error)
  * latest IOs through this device.
  */
 struct core_log_entry {
-    double start_time_ms;
     double finish_time_ms;
     uint32_t bytes;
 };
 
-#define CORE_LOG_SIZE_PER_PACKAGE (120000)
-static struct core_log_entry **core_log;
+#define CORE_LOG_SIZE (120000)
+static struct core_log_entry *core_log;
 
-static int *core_log_head;
-static int *core_log_tail;
+static int core_log_head;
+static int core_log_tail;
 
-static env_rwlock *core_log_lock;
+static env_rwlock core_log_lock;
 
 // Exposed for device logging.
 extern double base_time_ms;
@@ -83,35 +82,30 @@ extern double base_time_ms;
  * the log is full. Returns the timestamp for this entry.
  */
 void
-core_log_push_entry(int pkg, double start_time_ms, double finish_time_ms,
-                    uint32_t bytes)
+core_log_push_entry(double finish_time_ms, uint32_t bytes)
 {
     int pos;
 
-    env_rwlock_write_lock(&core_log_lock[pkg]);
+    env_rwlock_write_lock(&core_log_lock);
 
-    pos = (core_log_tail[pkg] + 1) % CORE_LOG_SIZE_PER_PACKAGE;
+    pos = (core_log_tail + 1) % CORE_LOG_SIZE;
 
-    core_log[pkg][pos].start_time_ms = start_time_ms;
-    core_log[pkg][pos].finish_time_ms = finish_time_ms;
-    core_log[pkg][pos].bytes = bytes;
+    core_log[pos].finish_time_ms = finish_time_ms;
+    core_log[pos].bytes = bytes;
 
-    core_log_tail[pkg] = pos;
-    if (core_log_tail[pkg] == core_log_head[pkg]) {
-        core_log_head[pkg] = (core_log_head[pkg] + 1)
-                             % CORE_LOG_SIZE_PER_PACKAGE;
-    }
+    core_log_tail = pos;
+    if (core_log_tail == core_log_head)
+        core_log_head = (core_log_head + 1) % CORE_LOG_SIZE;
 
-    if (core_log_head[pkg] < 0)
-        core_log_head[pkg] = 0;
+    if (core_log_head < 0)
+        core_log_head = 0;
 
     if (DEVICE_LOG_ENABLE) {
-        fprintf(fdevice, "core req: %.3lf - %.3lf of %u\n",
-                start_time_ms - base_time_ms,
+        fprintf(fdevice, "core req: @ %.3lf of %u\n",
                 finish_time_ms - base_time_ms, bytes);
     }
 
-    env_rwlock_write_unlock(&core_log_lock[pkg]);
+    env_rwlock_write_unlock(&core_log_lock);
 }
 
 /**
@@ -121,27 +115,24 @@ double
 core_log_query_throughput(double begin_time_ms, double end_time_ms)
 {
     double kilobytes = 0.0;
-    int pkg;
 
-    for (pkg = 0; pkg < core_parallelism; ++pkg) {
-        env_rwlock_read_lock(&core_log_lock[pkg]);
+    env_rwlock_read_lock(&core_log_lock);
 
-        if (core_log_head[pkg] >= 0) {
-            int i = core_log_tail[pkg] + 1;
+    if (core_log_head >= 0) {
+        int i = core_log_tail + 1;
 
-            do {
-                i = i == 0 ? CORE_LOG_SIZE_PER_PACKAGE - 1 : i - 1;
+        do {
+            i = i == 0 ? CORE_LOG_SIZE - 1 : i - 1;
 
-                if (core_log[pkg][i].finish_time_ms <= begin_time_ms)
-                    break;
+            if (core_log[i].finish_time_ms <= begin_time_ms)
+                break;
 
-                if (core_log[pkg][i].finish_time_ms <= end_time_ms)
-                    kilobytes += (double) core_log[pkg][i].bytes / 1024.0;
-            } while (i != core_log_head[pkg]);
-        }
-
-        env_rwlock_read_unlock(&core_log_lock[pkg]);
+            if (core_log[i].finish_time_ms <= end_time_ms)
+                kilobytes += (double) core_log[i].bytes / 1024.0;
+        } while (i != core_log_head);
     }
+
+    env_rwlock_read_unlock(&core_log_lock);
 
     return (kilobytes * 1000.0) / (end_time_ms - begin_time_ms);
 }
@@ -159,7 +150,7 @@ core_obj_setup(ocf_cache_t cache, ocf_core_t *core)
 {
     struct ocf_mngt_core_config core_cfg = { .name = "core" };
     struct add_core_callback_states callback_states;
-    int ret, i;
+    int ret;
 
     /** Let the callback state point to this functions return value. */
     callback_states.core = core;
@@ -185,18 +176,12 @@ core_obj_setup(ocf_cache_t cache, ocf_core_t *core)
         return ret;
 
     /** Setup device log. */
-    core_log = malloc(sizeof(struct core_log_entry *) * core_parallelism);
-    core_log_head = malloc(sizeof(int) * core_parallelism);
-    core_log_tail = malloc(sizeof(int) * core_parallelism);
-    core_log_lock = malloc(sizeof(env_rwlock) * core_parallelism);
+    core_log = malloc(sizeof(struct core_log_entry) * CORE_LOG_SIZE);
 
-    for (i = 0; i < core_parallelism; ++i) {
-        core_log[i] = malloc(sizeof(struct core_log_entry)
-                              * CORE_LOG_SIZE_PER_PACKAGE);
-        core_log_head[i] = -1;
-        core_log_tail[i] = -1;
-        env_rwlock_init(&core_log_lock[i]);
-    }
+    core_log_head = -1;
+    core_log_tail = -1;
+
+    env_rwlock_init(&core_log_lock);
 
     DEBUG("SETUP: done");
 
@@ -211,7 +196,7 @@ int
 core_obj_stop(ocf_core_t core)
 {
     struct remove_core_callback_states callback_states;
-    int ret = 0, i;
+    int ret = 0;
 
     /** Let the callback state point to this functions return value. */
     callback_states.error = &ret;
@@ -222,15 +207,9 @@ core_obj_stop(ocf_core_t core)
         return ret;
 
     /** Free device log. */
-    for (i = 0; i < core_parallelism; ++i) {
-        env_rwlock_destroy(&core_log_lock[i]);
-        free(core_log[i]);
-    }
+    env_rwlock_destroy(&core_log_lock);
 
     free(core_log);
-    free(core_log_head);
-    free(core_log_tail);
-    free(core_log_lock);
 
     DEBUG("STOP: done");
 

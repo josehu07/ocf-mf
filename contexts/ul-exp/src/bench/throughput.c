@@ -167,9 +167,10 @@ submit_10_ios_in_a_row(ocf_core_t core, double proportion_reads,
         uint64_t addr = workload_func() * PAGE_SIZE;
 
         simfs_data_t *data = simfs_data_alloc(1);
+        data->served = false;   // Set to false on user-issued data.
 
-        DEBUG("ISSUE: dir = %s, core pos = 0x%08lx, len = %u",
-              dir == OCF_WRITE ? "WR <-" : "RD ->", addr, size);
+        // DEBUG("ISSUE: dir = %s, core pos = 0x%08lx, len = %u",
+        //       dir == OCF_WRITE ? "WR <-" : "RD ->", addr, size);
 
         ret = submit_io(core, data, addr, size, dir,
                         dir == OCF_READ ? read_cmpl_callback

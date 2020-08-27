@@ -70,9 +70,12 @@ simfs_data_alloc(uint32_t pages)
     simfs_data_t *data;
 
     data = malloc(sizeof(simfs_data_t));
+
     data->ptr = malloc(pages * PAGE_SIZE);
     data->offset = 0;
     data->pages = pages;
+
+    data->served = true;    // Only set to false on user-issued data.
 
     memset(data->ptr, 0, pages * PAGE_SIZE);
 

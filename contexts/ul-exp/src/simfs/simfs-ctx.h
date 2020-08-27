@@ -25,6 +25,7 @@ struct simfs_data {
     void *ptr;
     int offset;
     uint32_t pages;     /** Total allocated size in pages. */
+    bool served;        /** Have been served by a volume?. */
 };
 
 typedef struct simfs_data simfs_data_t;

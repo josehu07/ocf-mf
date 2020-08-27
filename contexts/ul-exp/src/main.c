@@ -28,11 +28,6 @@ const bool MONITOR_LOG_ENABLE = false;
 const char *cache_sock_name = "cache-sock";
 const char *core_sock_name  = "core-sock";
 
-double cpu_freq_mhz = -1.0;
-
-int cache_parallelism = 0;
-int core_parallelism  = 0;
-
 uint64_t cache_capacity_bytes = 0;
 uint64_t core_capacity_bytes  = 0;
 
@@ -80,24 +75,8 @@ static benchmark_t bench_funcs[] = {
 
 
 /**
- * Controlling global time in ms. Assumes Intel CPU.
+ * Controlling global time in ms.
  */
-// static uint64_t boot_cpu_cycle;
-
-// static inline uint64_t
-// rdtsc()
-// {
-//     uint32_t lo, hi;
-//     __asm__ __volatile__ (
-//       "xorl %%eax, %%eax\n"
-//       "cpuid\n"
-//       "rdtsc\n"
-//       : "=a" (lo), "=d" (hi)
-//       :
-//       : "%ebx", "%ecx");
-//     return (uint64_t) hi << 32 | lo;
-// }
-
 static struct timespec boot_timespec;
 
 double
@@ -237,32 +216,6 @@ _print_statistics(struct ocf_stats_usage *stats_usage,
 
 
 /**
- * Read the `/proc/cpuinfo` virtual file for CPU frequency.
- */
-// static void
-// _read_cpu_frequency()
-// {
-//     char *line = NULL;
-//     size_t len = 0;
-//     ssize_t rlen = 0;
-
-//     FILE *fcpu = fopen("/proc/cpuinfo", "r");
-//     if (fcpu == NULL)
-//         error("Cannot open `/proc/cpuinfo`", 1);
-
-//     while ((rlen = getline(&line, &len, fcpu)) != -1) {
-//         if (rlen > 7 && (! strncmp(line, "cpu MHz", 7))) {
-//             sscanf(line, "cpu MHz         : %lf\n", &cpu_freq_mhz);
-//             break;
-//         }
-//     }
-
-//     if (cpu_freq_mhz <= 0.0)
-//         error("Invalid CPU frequency MHz number", 1);
-//     printf("  CPU frequency: %.3lf MHz\n", cpu_freq_mhz);
-// }
-
-/**
  * Read cache and core device config files.
  */
 static void
@@ -293,13 +246,6 @@ _read_cache_device_config()
         else if (rlen > 9 && (! strncmp(line, "PAGE_SIZE", 9)))
             sscanf(line, "PAGE_SIZE %lu\n", &page_size);
     }
-
-    // cache_parallelism = flash_size;
-    cache_parallelism = 1;
-
-    // if (cache_parallelism <= 0)
-    //     error("Invalid cache SSD number of packages", 2);
-    // printf("  Cache parallelism: %d\n", cache_parallelism);
 
     cache_capacity_bytes = flash_size * package_size * die_size
                            * plane_size * block_size * page_size;
@@ -347,13 +293,6 @@ _read_core_device_config()
     if (page_size <= 0)
         error("Invalid FlashSim page size", 3);
     flashsim_page_size = page_size;
-
-    // core_parallelism = flash_size;
-    core_parallelism = 1;
-
-    // if (core_parallelism <= 0)
-    //     error("Invalid core SSD number of packages", 3);
-    // printf("  Core parallelism: %d\n", core_parallelism);
 
     core_capacity_bytes = flash_size * package_size * die_size
                           * plane_size * block_size * page_size;
@@ -478,13 +417,7 @@ main(int argc, char *argv[])
         }
     }
 
-    /** Get CPU frequency for timing purpose. */
-    // _read_cpu_frequency();
-
-    /** Record RDTSC at boot time. */
-    // boot_cpu_cycle = rdtsc();
-
-    /** Set boot timespec. */
+    /** Record boot timespec. */
     clock_gettime(CLOCK_REALTIME, &boot_timespec);
 
     /** Read device config files. */
