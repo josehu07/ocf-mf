@@ -195,7 +195,7 @@ prompt_usage_exit()
                     "Where:\n"
                     "  mode := pt|wa|wb|wt|mfwa|mfwb|mfwt\n"
                     "  intensity must be a multiple of 10\n"
-                    "  reads_percentage := 100|95|50\n"
+                    "  reads_percentage := 100|95|50|0\n"
                     "  hit_ratio := 99|95|80\n");
     exit(1);
 }
@@ -225,13 +225,15 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
     if (intensity % 10 != 0)
         prompt_usage_exit();
 
-    /** Read percentage := 100% | 95% | 50%. */
+    /** Read percentage := 100% | 95% | 50% | 0%. */
     if (reads_percentage == 100)
         proportion_reads = 1.0;
     else if (reads_percentage == 95)
         proportion_reads = 0.95;
     else if (reads_percentage == 50)
         proportion_reads = 0.5;
+    else if (reads_percentage == 0)
+        proportion_reads = 0.0;
     else
         prompt_usage_exit();
 

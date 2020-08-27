@@ -9,7 +9,7 @@ do
     do
         echo "  intensity = ${INTENSITY}"
 
-        for READ_PERCENTAGE in 100 95 50
+        for READ_PERCENTAGE in 100 95 50 0
         do
             echo "    read_percentage = ${READ_PERCENTAGE}"
 
