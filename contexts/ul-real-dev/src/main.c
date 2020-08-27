@@ -27,6 +27,8 @@ const bool MONITOR_LOG_ENABLE = false;
 /** Global parameters. */
 const char *cache_sock_name = "cache-sock";
 const char *core_sock_name  = "core-sock";
+//const char *cache_sock_name = "/mnt/optane/ocf_cache";
+//const char *core_sock_name  = "/mnt/970/ocf_core";
 
 double cpu_freq_mhz = -1.0;
 
@@ -359,8 +361,10 @@ main(int argc, char *argv[])
     printf("\nExperiment setup parameters:\n\n");
 
     /** FlashSim sockets. */
-    cache_sock_name = "cache-sock";
-    core_sock_name  = "core-sock";
+    //cache_sock_name = "cache-sock";
+    //core_sock_name  = "core-sock";
+    cache_sock_name = "/mnt/optane/ocf_cache";
+    core_sock_name  = "/mnt/970/ocf_core";
 
     /** Get cache mode and intensity for this round of experiment. */
     if (argc != 3) {
