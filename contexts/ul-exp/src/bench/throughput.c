@@ -416,9 +416,5 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
         usleep((int) (delta_ms * 1000));
     } while (cur_time_ms < base_time_ms + 1000.0 * 75);
 
-    /** Force device volume submission threads to stop. */
-    cache_vol_force_stop();
-    core_vol_force_stop();
-
     return 0;
 }

@@ -4,7 +4,7 @@
 for MODE in pt wa wb wt mfwa mfwb mfwt; do
     echo "Doing mode ${MODE}: "
 
-    for INTENSITY in {12000..16000..500}; do
+    for INTENSITY in {12000..22000..1000}; do
         echo "  intensity = ${INTENSITY}"
 
         for READ_PERCENTAGE in 100 95 50 0; do
@@ -15,7 +15,7 @@ for MODE in pt wa wb wt mfwa mfwb mfwt; do
 
                 while true; do
                     sleep 5
-
+                    
                     timeout 90s ./bench ${MODE} throughput ${INTENSITY} ${READ_PERCENTAGE} ${HIT_RATIO} \
                         > result/result-int${INTENSITY}-read${READ_PERCENTAGE}-hit${HIT_RATIO}-${MODE}.txt
 

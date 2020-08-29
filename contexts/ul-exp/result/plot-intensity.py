@@ -1,6 +1,7 @@
 import matplotlib
 matplotlib.use('Agg')
 
+import numpy as np
 import matplotlib.pyplot as plt
 import os
 from collections import OrderedDict
@@ -101,111 +102,143 @@ for rp in (100, 95, 50, 0):
             continue
 
 
-        # for baseline in ('wa', 'wb', 'wt'):
-        #     fig = plt.figure(filename, constrained_layout=True)
-        #     gs = fig.add_gridspec(3, 1)
+        #
+        # Set these according to experiment setup.
+        #
 
-        #     ax1 = fig.add_subplot(gs[0,:])
-        #     ax1.bar([v-0.25 for v in avg_cache_tps['pt'].keys()],
-        #             avg_cache_tps['pt'].values(),
-        #             width=0.25, color="lightsteelblue", edgecolor="white", label="pt")
-        #     ax1.bar(avg_cache_tps[baseline].keys(),
-        #             avg_cache_tps[baseline].values(),
-        #             width=0.25, color="blue",edgecolor="white", label=baseline)
-        #     ax1.bar([v+0.25 for v in avg_cache_tps['mf'+baseline].keys()],
-        #             avg_cache_tps['mf'+baseline].values(),
-        #             width=0.25, color="midnightblue", edgecolor="white", label="mf"+baseline)
-        #     ax1.set_title("Cache Throughput")
-        #     ax1.set_xticks(range(10, 25))
-        #     ax1.set_ylim((0, 100.))
-        #     ax1.set_ylabel("(MiB/s)")
-        #     ax1.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
+        intensity_range = np.arange(12, 23, 1)
 
-        #     ax2 = fig.add_subplot(gs[1,:])
-        #     ax2.bar([v-0.25 for v in avg_core_tps['pt'].keys()],
-        #             avg_core_tps['pt'].values(),
-        #             width=0.25, color="bisque", edgecolor="white", label="pt")
-        #     ax2.bar(avg_core_tps[baseline].keys(),
-        #             avg_core_tps[baseline].values(),
-        #             width=0.25, color="darkorange", edgecolor="white", label=baseline)
-        #     ax2.bar([v+0.25 for v in avg_core_tps['mf'+baseline].keys()],
-        #             avg_core_tps['mf'+baseline].values(),
-        #             width=0.25, color="saddlebrown", edgecolor="white", label="mf"+baseline)
-        #     ax2.set_title("Core Throughput")
-        #     ax2.set_xticks(range(10, 25))
-        #     ax2.set_ylim((0, 100.))
-        #     ax2.set_ylabel("(MiB/s)")
-        #     ax2.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
+        throughput_ylim = (0., 100.)
+        # if rp == 100:
+        #     throughput_ylim = (0., 100.)
+        # elif rp == 95:
+        #     throughput_ylim = (0., 60.)
+        # elif rp == 50:
+        #     throughput_ylim = (0., 25.)
+        # elif rp == 0:
+        #     throughput_ylim = (0., 8.)
 
-        #     ax3 = fig.add_subplot(gs[2:,:])
-        #     ax3.bar([v-0.25 for v in avg_total_tps['pt'].keys()],
-        #             avg_total_tps['pt'].values(),
-        #             width=0.25, color="lightgreen", edgecolor="white", label="pt")
-        #     ax3.bar(avg_total_tps[baseline].keys(),
-        #             avg_total_tps[baseline].values(),
-        #             width=0.25, color="lime", edgecolor="white", label=baseline)
-        #     ax3.bar([v+0.25 for v in avg_total_tps['mf'+baseline].keys()],
-        #             avg_total_tps['mf'+baseline].values(),
-        #             width=0.25, color="darkgreen", edgecolor="white", label="mf"+baseline)
-        #     ax3.set_title("Total Throughput")
-        #     ax3.set_xticks(range(10, 25))
-        #     ax3.set_ylim((0, 100.))
-        #     ax3.set_ylabel("(MiB/s)")
-        #     ax3.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
-        #     ax3.set_xlabel("Intensity (x1000 4K-Reqs/s)")
+        #
+        # Uncomment below for plotting with PT.
+        #
 
-        #     fig.suptitle("Throughput on Different Intensities, baseline = " + baseline)
-
-        #     plt.savefig("intensity-" + baseline + ".png", dpi=200)
-        #     plt.close()
+        bar_width = 0.25
+        bar_shift = bar_width
 
         for baseline in ('wa', 'wb', 'wt'):
             fig = plt.figure(filename, constrained_layout=True)
             gs = fig.add_gridspec(3, 1)
 
             ax1 = fig.add_subplot(gs[0,:])
-            ax1.bar([v-0.2 for v in avg_cache_tps[baseline].keys()],
+            ax1.bar([v-bar_shift for v in avg_cache_tps['pt'].keys()],
+                    avg_cache_tps['pt'].values(),
+                    width=bar_width, color="lightsteelblue", edgecolor="white", label="pt")
+            ax1.bar(avg_cache_tps[baseline].keys(),
                     avg_cache_tps[baseline].values(),
-                    width=0.4, color="lightsteelblue", edgecolor="white", label=baseline)
-            ax1.bar([v+0.2 for v in avg_cache_tps['mf'+baseline].keys()],
+                    width=bar_width, color="blue",edgecolor="white", label=baseline)
+            ax1.bar([v+bar_shift for v in avg_cache_tps['mf'+baseline].keys()],
                     avg_cache_tps['mf'+baseline].values(),
-                    width=0.4, color="midnightblue", edgecolor="white", label="mf"+baseline)
+                    width=bar_width, color="midnightblue", edgecolor="white", label="mf"+baseline)
             ax1.set_title("Cache Throughput")
-            ax1.set_xticks(range(10, 26))
-            ax1.set_ylim((0, 100.))
+            ax1.set_xticks(intensity_range)
+            ax1.set_ylim(throughput_ylim)
             ax1.set_ylabel("(MiB/s)")
             ax1.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
             ax2 = fig.add_subplot(gs[1,:])
-            ax2.bar([v-0.2 for v in avg_core_tps[baseline].keys()],
+            ax2.bar([v-bar_shift for v in avg_core_tps['pt'].keys()],
+                    avg_core_tps['pt'].values(),
+                    width=bar_width, color="bisque", edgecolor="white", label="pt")
+            ax2.bar(avg_core_tps[baseline].keys(),
                     avg_core_tps[baseline].values(),
-                    width=0.4, color="bisque", edgecolor="white", label=baseline)
-            ax2.bar([v+0.2 for v in avg_core_tps['mf'+baseline].keys()],
+                    width=bar_width, color="darkorange", edgecolor="white", label=baseline)
+            ax2.bar([v+bar_shift for v in avg_core_tps['mf'+baseline].keys()],
                     avg_core_tps['mf'+baseline].values(),
-                    width=0.4, color="saddlebrown", edgecolor="white", label="mf"+baseline)
+                    width=bar_width, color="saddlebrown", edgecolor="white", label="mf"+baseline)
             ax2.set_title("Core Throughput")
-            ax2.set_xticks(range(10, 26))
-            ax2.set_ylim((0, 100.))
+            ax2.set_xticks(intensity_range)
+            ax2.set_ylim(throughput_ylim)
             ax2.set_ylabel("(MiB/s)")
             ax2.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
             ax3 = fig.add_subplot(gs[2:,:])
-            ax3.bar([v-0.2 for v in avg_total_tps[baseline].keys()],
+            ax3.bar([v-bar_shift for v in avg_total_tps['pt'].keys()],
+                    avg_total_tps['pt'].values(),
+                    width=bar_width, color="lightgreen", edgecolor="white", label="pt")
+            ax3.bar(avg_total_tps[baseline].keys(),
                     avg_total_tps[baseline].values(),
-                    width=0.4, color="lightgreen", edgecolor="white", label=baseline)
-            ax3.bar([v+0.2 for v in avg_total_tps['mf'+baseline].keys()],
+                    width=bar_width, color="lime", edgecolor="white", label=baseline)
+            ax3.bar([v+bar_shift for v in avg_total_tps['mf'+baseline].keys()],
                     avg_total_tps['mf'+baseline].values(),
-                    width=0.4, color="darkgreen", edgecolor="white", label="mf"+baseline)
+                    width=bar_width, color="darkgreen", edgecolor="white", label="mf"+baseline)
             ax3.set_title("Total Throughput")
-            ax3.set_xticks(range(10, 26))
-            ax3.set_ylim((0, 100.))
+            ax3.set_xticks(intensity_range)
+            ax3.set_ylim(throughput_ylim)
             ax3.set_ylabel("(MiB/s)")
             ax3.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
 
             ax3.set_xlabel("Intensity (x1000 4K-Reqs/s)")
 
-            fig.suptitle("Throughput on Different Intensities, baseline = " + baseline)
+            # fig.suptitle("Throughput on Different Intensities, baseline = " + baseline)
 
-            plt.savefig("intensity-" + baseline + ".png", dpi=200)
+            plt.savefig("intensity-read"+str(rp)+"-hit"+str(hr)+"-"+baseline +".png", dpi=200)
             plt.close()
+
+
+        #
+        # Uncomment below for plotting without PT.
+        #
+
+        # bar_width = 0.4
+        # bar_shift = bar_width / 2
+
+        # for baseline in ('wa', 'wb', 'wt'):
+        #     fig = plt.figure(filename, constrained_layout=True)
+        #     gs = fig.add_gridspec(3, 1)
+
+        #     ax1 = fig.add_subplot(gs[0,:])
+        #     ax1.bar([v-bar_shift for v in avg_cache_tps[baseline].keys()],
+        #             avg_cache_tps[baseline].values(),
+        #             width=bar_width, color="lightsteelblue", edgecolor="white", label=baseline)
+        #     ax1.bar([v+bar_shift for v in avg_cache_tps['mf'+baseline].keys()],
+        #             avg_cache_tps['mf'+baseline].values(),
+        #             width=bar_width, color="midnightblue", edgecolor="white", label="mf"+baseline)
+        #     ax1.set_title("Cache Throughput")
+        #     ax1.set_xticks(intensity_range)
+        #     ax1.set_ylim(throughput_ylim)
+        #     ax1.set_ylabel("(MiB/s)")
+        #     ax1.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
+
+        #     ax2 = fig.add_subplot(gs[1,:])
+        #     ax2.bar([v-bar_shift for v in avg_core_tps[baseline].keys()],
+        #             avg_core_tps[baseline].values(),
+        #             width=bar_width, color="bisque", edgecolor="white", label=baseline)
+        #     ax2.bar([v+bar_shift for v in avg_core_tps['mf'+baseline].keys()],
+        #             avg_core_tps['mf'+baseline].values(),
+        #             width=bar_width, color="saddlebrown", edgecolor="white", label="mf"+baseline)
+        #     ax2.set_title("Core Throughput")
+        #     ax2.set_xticks(intensity_range)
+        #     ax2.set_ylim(throughput_ylim)
+        #     ax2.set_ylabel("(MiB/s)")
+        #     ax2.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
+
+        #     ax3 = fig.add_subplot(gs[2:,:])
+        #     ax3.bar([v-bar_shift for v in avg_total_tps[baseline].keys()],
+        #             avg_total_tps[baseline].values(),
+        #             width=bar_width, color="lightgreen", edgecolor="white", label=baseline)
+        #     ax3.bar([v+bar_shift for v in avg_total_tps['mf'+baseline].keys()],
+        #             avg_total_tps['mf'+baseline].values(),
+        #             width=bar_width, color="darkgreen", edgecolor="white", label="mf"+baseline)
+        #     ax3.set_title("Total Throughput")
+        #     ax3.set_xticks(intensity_range)
+        #     ax3.set_ylim(throughput_ylim)
+        #     ax3.set_ylabel("(MiB/s)")
+        #     ax3.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
+
+        #     ax3.set_xlabel("Intensity (x1000 4K-Reqs/s)")
+
+        #     # fig.suptitle("Throughput on Different Intensities, baseline = " + baseline)
+
+        #     plt.savefig("intensity-read"+rp+"-hit"+hr+"-"+baseline +".png", dpi=200)
+        #     plt.close()

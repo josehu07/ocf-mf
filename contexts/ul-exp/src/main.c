@@ -375,6 +375,7 @@ main(int argc, char *argv[])
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 
+    /** 0. Setting up... */
     printf("\nMain setup parameters:\n\n");
 
     /** FlashSim sockets. */
@@ -474,33 +475,37 @@ main(int argc, char *argv[])
     if (ret)
       error("Error when performing workload", ret);
 
-    /** 7. Stop the multi-factor monitor. */
-    if (cache_mode == BENCH_CACHE_MODE_MFWA
-        || cache_mode == BENCH_CACHE_MODE_MFWB
-        || cache_mode == BENCH_CACHE_MODE_MFWT)
-        ocf_mngt_mf_monitor_stop();
-
-    /** 8. Collect & show statistics. */
+    /** 7. Collect & show statistics. */
     ocf_stats_collect_core(core, &stats_usage, &stats_reqs,
                            &stats_blocks, &stats_errors);
     _print_statistics(&stats_usage, &stats_reqs,
                       &stats_blocks, &stats_errors);
 
-    /** 9. Stop and detach core from cache. */
+    /** 8. Stop the multi-factor monitor. */
+    if (cache_mode == BENCH_CACHE_MODE_MFWA
+        || cache_mode == BENCH_CACHE_MODE_MFWB
+        || cache_mode == BENCH_CACHE_MODE_MFWT)
+        ocf_mngt_mf_monitor_stop();
+
+    /** 9. Force device volume submission threads to stop. */
+    cache_vol_force_stop();
+    core_vol_force_stop();
+
+    /** 10. Stop and detach core from cache. */
     // ret = core_obj_stop(core);
     // if (ret)
     //     error("Unable to stop core", ret);
 
-    /** 10. Stop the cache. */
+    /** 11. Stop the cache. */
     // ret = cache_obj_stop(cache);
     // if (ret)
     //     error("Unable to stop cache", ret);
 
-    /** 11. Unregister volume types. */
+    /** 12. Unregister volume types. */
     // core_vol_unregister(ctx);
     // cache_vol_unregister(ctx);
 
-    /** 12. Cleanup this context. */
+    /** 13. Cleanup this context. */
     // simfs_ctx_cleanup(ctx);
 
     fclose(fdevice);

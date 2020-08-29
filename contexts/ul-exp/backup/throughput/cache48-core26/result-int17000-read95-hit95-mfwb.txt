@@ -1,0 +1,208 @@
+
+Main setup parameters:
+
+  Using cache mode: mfwb
+  Cache 1/8 capacity: 33554432 bytes
+  Core 1/8 capacity: 33554432 bytes
+  FlashSim page size: 4096 bytes
+  FlashSim enable data: false
+
+Experiment parameters:
+
+  Intensity: 17000 4KiB-Reqs/s
+  Reads percentage: 95%
+  Approx hit ratio: 95%
+
+Begin stabilizing stage... (0 - 15 secs)
+
+  *** #0 @ 500.600 ms: miss_ratio = 0.93471, load_admit = 1.000, cache_tp = 303.636, core_tp = 31058.753
+  *** #0 @ 1000.773 ms: miss_ratio = 0.81269, load_admit = 1.000, cache_tp = 503.826, core_tp = 21984.392
+  *** #0 @ 1501.112 ms: miss_ratio = 0.71491, load_admit = 1.000, cache_tp = 295.799, core_tp = 8410.299
+  *** #0 @ 2001.752 ms: miss_ratio = 0.59741, load_admit = 1.000, cache_tp = 2309.043, core_tp = 4226.587
+  *** #0 @ 2501.804 ms: miss_ratio = 0.50254, load_admit = 1.000, cache_tp = 575.940, core_tp = 2359.754
+  *** #0 @ 3001.912 ms: miss_ratio = 0.41156, load_admit = 1.000, cache_tp = 815.824, core_tp = 1511.674
+  *** #0 @ 3502.664 ms: miss_ratio = 0.33748, load_admit = 1.000, cache_tp = 1797.296, core_tp = 1174.234
+  *** #0 @ 4003.063 ms: miss_ratio = 0.29300, load_admit = 1.000, cache_tp = 391.688, core_tp = 1031.178
+  *** #0 @ 4503.782 ms: miss_ratio = 0.25962, load_admit = 1.000, cache_tp = 375.460, core_tp = 798.852
+  *** #0 @ 5003.935 ms: miss_ratio = 0.22321, load_admit = 1.000, cache_tp = 3542.914, core_tp = 1071.671
+  *** #0 @ 5504.697 ms: miss_ratio = 0.18179, load_admit = 1.000, cache_tp = 8507.033, core_tp = 1621.528
+  *** #0 @ 6004.918 ms: miss_ratio = 0.16333, load_admit = 1.000, cache_tp = 8220.364, core_tp = 1143.494
+  *** #0 @ 6505.708 ms: miss_ratio = 0.15011, load_admit = 1.000, cache_tp = 9041.721, core_tp = 1110.247
+  *** #0 @ 7006.410 ms: miss_ratio = 0.13475, load_admit = 1.000, cache_tp = 27832.898, core_tp = 1429.991
+  *** #0 @ 7506.929 ms: miss_ratio = 0.12603, load_admit = 1.000, cache_tp = 34628.038, core_tp = 935.029
+  *** #0 @ 8007.335 ms: miss_ratio = 0.11923, load_admit = 0.970, cache_tp = 36626.300, core_tp = 1902.457
+  *** #0 @ 8507.973 ms: miss_ratio = 0.11333, load_admit = 0.920, cache_tp = 37655.945, core_tp = 2516.788
+  *** #0 @ 9008.276 ms: miss_ratio = 0.10818, load_admit = 0.840, cache_tp = 38192.861, core_tp = 4837.069
+  *** #0 @ 9508.458 ms: miss_ratio = 0.10371, load_admit = 0.870, cache_tp = 19392.947, core_tp = 5262.086
+  *** #0 @ 10008.996 ms: miss_ratio = 0.09956, load_admit = 0.770, cache_tp = 27746.138, core_tp = 6169.360
+  *** #0 @ 10509.700 ms: miss_ratio = 0.09538, load_admit = 0.770, cache_tp = 34559.363, core_tp = 7789.038
+  *** #0 @ 11010.353 ms: miss_ratio = 0.09186, load_admit = 0.720, cache_tp = 28147.237, core_tp = 7797.815
+  *** #0 @ 11510.578 ms: miss_ratio = 0.08850, load_admit = 0.690, cache_tp = 39790.066, core_tp = 9067.913
+  *** #0 @ 12010.628 ms: miss_ratio = 0.08515, load_admit = 0.680, cache_tp = 25021.519, core_tp = 9551.053
+  *** #0 @ 12511.111 ms: miss_ratio = 0.08214, load_admit = 0.660, cache_tp = 41288.110, core_tp = 9366.950
+  *** #0 @ 13011.440 ms: miss_ratio = 0.07839, load_admit = 0.650, cache_tp = 41044.936, core_tp = 9793.542
+  *** #0 @ 13512.156 ms: miss_ratio = 0.07522, load_admit = 0.620, cache_tp = 27776.252, core_tp = 9905.825
+  *** #0 @ 14012.466 ms: miss_ratio = 0.07273, load_admit = 0.620, cache_tp = 16757.618, core_tp = 10369.576
+  *** #0 @ 14513.001 ms: miss_ratio = 0.06946, load_admit = 0.610, cache_tp = 34922.604, core_tp = 9461.868
+
+Measuring delta overhead... (15 - 30 secs)
+
+  ??? #0 @ 15013.133 ms: miss_ratio = 0.06659, load_admit = 0.640, cache_tp = 27768.673, core_tp = 8933.643
+  ??? #0 @ 15513.234 ms: miss_ratio = 0.06405, load_admit = 0.590, cache_tp = 41999.472, core_tp = 9790.012
+  ??? #0 @ 16013.742 ms: miss_ratio = 0.06224, load_admit = 0.570, cache_tp = 10325.511, core_tp = 9102.753
+  ??? #0 @ 16513.750 ms: miss_ratio = 0.06052, load_admit = 0.510, cache_tp = 12255.812, core_tp = 9567.853
+  ??? #0 @ 17014.493 ms: miss_ratio = 0.05857, load_admit = 0.430, cache_tp = 24978.877, core_tp = 10744.033
+  ??? #0 @ 17514.778 ms: miss_ratio = 0.05621, load_admit = 0.440, cache_tp = 32813.278, core_tp = 11113.659
+  ??? #0 @ 18015.531 ms: miss_ratio = 0.05482, load_admit = 0.380, cache_tp = 12381.352, core_tp = 11582.555
+  ??? #0 @ 18516.063 ms: miss_ratio = 0.05323, load_admit = 0.380, cache_tp = 22655.902, core_tp = 12131.097
+  ??? #0 @ 19016.354 ms: miss_ratio = 0.05155, load_admit = 0.330, cache_tp = 27144.217, core_tp = 11865.101
+  ??? #0 @ 19517.105 ms: miss_ratio = 0.05006, load_admit = 0.300, cache_tp = 28716.879, core_tp = 12541.168
+  ??? #0 @ 20017.311 ms: miss_ratio = 0.04877, load_admit = 0.280, cache_tp = 32610.561, core_tp = 12234.958
+  ??? #0 @ 20517.568 ms: miss_ratio = 0.04750, load_admit = 0.290, cache_tp = 38692.087, core_tp = 4333.770
+  ??? #0 @ 21017.575 ms: miss_ratio = 0.04639, load_admit = 0.320, cache_tp = 38831.488, core_tp = 15023.802
+  ??? #0 @ 21517.576 ms: miss_ratio = 0.04530, load_admit = 0.330, cache_tp = 23399.953, core_tp = 13719.972
+  ??? #0 @ 22017.625 ms: miss_ratio = 0.04433, load_admit = 0.330, cache_tp = 22477.770, core_tp = 9783.029
+  ??? #0 @ 22517.996 ms: miss_ratio = 0.04356, load_admit = 0.300, cache_tp = 27611.522, core_tp = 9928.636
+  ??? #0 @ 23018.657 ms: miss_ratio = 0.04265, load_admit = 0.270, cache_tp = 38908.611, core_tp = 10098.662
+  ??? #0 @ 23519.351 ms: miss_ratio = 0.04201, load_admit = 0.310, cache_tp = 14292.150, core_tp = 9906.241
+  ??? #0 @ 24019.930 ms: miss_ratio = 0.04122, load_admit = 0.300, cache_tp = 24403.760, core_tp = 8949.644
+  ??? #0 @ 24520.654 ms: miss_ratio = 0.04057, load_admit = 0.230, cache_tp = 26130.118, core_tp = 9809.778
+  ??? #0 @ 25020.661 ms: miss_ratio = 0.03976, load_admit = 0.240, cache_tp = 36039.547, core_tp = 519.993
+  ??? #0 @ 25521.031 ms: miss_ratio = 0.03899, load_admit = 0.160, cache_tp = 34094.770, core_tp = 9872.694
+  ??? #0 @ 26021.551 ms: miss_ratio = 0.03822, load_admit = 0.220, cache_tp = 30096.684, core_tp = 16678.646
+  ??? #0 @ 26522.025 ms: miss_ratio = 0.03740, load_admit = 0.230, cache_tp = 30195.380, core_tp = 8248.182
+  ??? #0 @ 27022.324 ms: miss_ratio = 0.03658, load_admit = 0.170, cache_tp = 29558.341, core_tp = 8187.109
+  ??? #0 @ 27522.539 ms: miss_ratio = 0.03569, load_admit = 0.160, cache_tp = 37839.676, core_tp = 8732.233
+  ??? #0 @ 28023.012 ms: miss_ratio = 0.03513, load_admit = 0.110, cache_tp = 28652.915, core_tp = 9207.296
+  ??? #0 @ 28523.096 ms: miss_ratio = 0.03455, load_admit = 0.080, cache_tp = 25051.803, core_tp = 7334.771
+  ??? #0 @ 29023.331 ms: miss_ratio = 0.03380, load_admit = 0.100, cache_tp = 29058.348, core_tp = 631.703
+  ??? #0 @ 29523.699 ms: miss_ratio = 0.03309, load_admit = 0.140, cache_tp = 38619.558, core_tp = 16995.483
+
+Start the experiment... (30 - 60 secs)
+
+  ... #330 @ 30024.155 ms: miss_ratio = 0.03234, load_admit = 0.120, cache_tp = 36366.848, core_tp = 6793.807
+  ... #7680 @ 30524.864 ms: miss_ratio = 0.03186, load_admit = 0.060, cache_tp = 33328.726, core_tp = 7501.360
+  ... #14810 @ 31025.435 ms: miss_ratio = 0.03151, load_admit = 0.040, cache_tp = 16181.519, core_tp = 7679.229
+  ... #21990 @ 31525.644 ms: miss_ratio = 0.03105, load_admit = 0.060, cache_tp = 21926.831, core_tp = 7404.904
+  ... #29430 @ 32026.061 ms: miss_ratio = 0.03064, load_admit = 0.020, cache_tp = 22541.222, core_tp = 7138.053
+  ... #36870 @ 32526.070 ms: miss_ratio = 0.03029, load_admit = 0.020, cache_tp = 16639.675, core_tp = 7423.855
+  ... #44230 @ 33026.589 ms: miss_ratio = 0.02982, load_admit = 0.040, cache_tp = 36378.263, core_tp = 6968.771
+  ... #51680 @ 33526.678 ms: miss_ratio = 0.02948, load_admit = 0.010, cache_tp = 22236.029, core_tp = 6798.786
+  ... #59050 @ 34027.202 ms: miss_ratio = 0.02903, load_admit = 0.030, cache_tp = 33125.313, core_tp = 6193.515
+  ... #66490 @ 34527.411 ms: miss_ratio = 0.02848, load_admit = 0.040, cache_tp = 37464.352, core_tp = 5893.538
+  ... #73720 @ 35027.563 ms: miss_ratio = 0.02818, load_admit = 0.020, cache_tp = 25968.097, core_tp = 5406.355
+  ... #81030 @ 35527.630 ms: miss_ratio = 0.02790, load_admit = 0.020, cache_tp = 23516.839, core_tp = 5647.241
+  ... #88480 @ 36027.859 ms: miss_ratio = 0.02755, load_admit = 0.020, cache_tp = 34120.355, core_tp = 5637.415
+  ... #95950 @ 36528.393 ms: miss_ratio = 0.02729, load_admit = 0.050, cache_tp = 13441.645, core_tp = 4930.734
+  ... #103400 @ 37028.627 ms: miss_ratio = 0.02701, load_admit = 0.090, cache_tp = 20966.192, core_tp = 4837.737
+  ... #110660 @ 37528.852 ms: miss_ratio = 0.02673, load_admit = 0.070, cache_tp = 22134.031, core_tp = 4350.041
+  ... #118100 @ 38029.295 ms: miss_ratio = 0.02638, load_admit = 0.070, cache_tp = 37606.693, core_tp = 4523.993
+  ... #125590 @ 38529.512 ms: miss_ratio = 0.02612, load_admit = 0.170, cache_tp = 28187.758, core_tp = 4246.156
+  ... #132980 @ 39029.979 ms: miss_ratio = 0.02589, load_admit = 0.190, cache_tp = 27694.185, core_tp = 3820.439
+  ... #140360 @ 39530.174 ms: miss_ratio = 0.02558, load_admit = 0.130, cache_tp = 37265.465, core_tp = 423.835
+  ... #147680 @ 40030.585 ms: miss_ratio = 0.02535, load_admit = 0.180, cache_tp = 28176.813, core_tp = 6067.007
+  ... #155010 @ 40530.900 ms: miss_ratio = 0.02510, load_admit = 0.170, cache_tp = 22449.851, core_tp = 3253.949
+  ... #162360 @ 41031.249 ms: miss_ratio = 0.02490, load_admit = 0.140, cache_tp = 23471.623, core_tp = 3229.747
+  ... #169640 @ 41531.311 ms: miss_ratio = 0.02468, load_admit = 0.110, cache_tp = 24876.901, core_tp = 3415.574
+  ... #176960 @ 42031.672 ms: miss_ratio = 0.02449, load_admit = 0.040, cache_tp = 26596.838, core_tp = 3261.650
+  ... #184170 @ 42532.149 ms: miss_ratio = 0.02427, load_admit = 0.050, cache_tp = 21619.364, core_tp = 3156.987
+  ... #191570 @ 43032.431 ms: miss_ratio = 0.02402, load_admit = 0.040, cache_tp = 36299.528, core_tp = 3190.201
+  ... #199030 @ 43532.947 ms: miss_ratio = 0.02378, load_admit = 0.050, cache_tp = 28890.157, core_tp = 3044.855
+  ... #206480 @ 44033.225 ms: miss_ratio = 0.02365, load_admit = 0.060, cache_tp = 11201.781, core_tp = 3078.291
+  ... #213890 @ 44533.369 ms: miss_ratio = 0.02338, load_admit = 0.080, cache_tp = 28119.918, core_tp = 3215.076
+  ... #221400 @ 45033.870 ms: miss_ratio = 0.02314, load_admit = 0.020, cache_tp = 37977.944, core_tp = 3260.733
+  ... #228890 @ 45534.492 ms: miss_ratio = 0.02292, load_admit = 0.010, cache_tp = 37473.316, core_tp = 3044.208
+  ... #236370 @ 46034.690 ms: miss_ratio = 0.02267, load_admit = 0.050, cache_tp = 37617.137, core_tp = 2686.938
+  ... #243850 @ 46535.284 ms: miss_ratio = 0.02250, load_admit = 0.040, cache_tp = 22557.195, core_tp = 2908.544
+  ... #251320 @ 47035.317 ms: miss_ratio = 0.02236, load_admit = 0.020, cache_tp = 14967.030, core_tp = 2719.824
+  ... #258780 @ 47535.777 ms: miss_ratio = 0.02216, load_admit = 0.030, cache_tp = 30212.167, core_tp = 2821.401
+  ... #266260 @ 48036.158 ms: miss_ratio = 0.02193, load_admit = 0.020, cache_tp = 35381.029, core_tp = 2933.764
+  ... #273710 @ 48536.441 ms: miss_ratio = 0.02174, load_admit = 0.050, cache_tp = 22747.143, core_tp = 2270.717
+  ... #281200 @ 49037.015 ms: miss_ratio = 0.02161, load_admit = 0.010, cache_tp = 38587.696, core_tp = 2541.083
+  ... #288680 @ 49537.456 ms: miss_ratio = 0.02142, load_admit = 0.040, cache_tp = 38789.819, core_tp = 2150.105
+  ... #296150 @ 50037.513 ms: miss_ratio = 0.02123, load_admit = 0.060, cache_tp = 38115.614, core_tp = 679.922
+  ... #303680 @ 50537.663 ms: miss_ratio = 0.02105, load_admit = 0.050, cache_tp = 38196.515, core_tp = 3430.968
+  ... #311140 @ 51037.768 ms: miss_ratio = 0.02088, load_admit = 0.070, cache_tp = 38551.939, core_tp = 1959.590
+  ... #318600 @ 51538.262 ms: miss_ratio = 0.02080, load_admit = 0.110, cache_tp = 27333.011, core_tp = 1926.098
+  ... #325970 @ 52038.332 ms: miss_ratio = 0.02068, load_admit = 0.100, cache_tp = 38306.596, core_tp = 1679.763
+  ... #333250 @ 52538.348 ms: miss_ratio = 0.02060, load_admit = 0.090, cache_tp = 14783.541, core_tp = 1391.957
+  ... #340540 @ 53038.356 ms: miss_ratio = 0.02052, load_admit = 0.080, cache_tp = 20663.670, core_tp = 1367.978
+  ... #347720 @ 53538.619 ms: miss_ratio = 0.02041, load_admit = 0.130, cache_tp = 21516.655, core_tp = 1319.304
+  ... #354910 @ 54039.047 ms: miss_ratio = 0.02032, load_admit = 0.120, cache_tp = 19023.735, core_tp = 1278.907
+  ... #362280 @ 54539.604 ms: miss_ratio = 0.02017, load_admit = 0.170, cache_tp = 33674.486, core_tp = 1326.522
+  ... #369700 @ 55039.917 ms: miss_ratio = 0.02001, load_admit = 0.160, cache_tp = 36305.294, core_tp = 1367.145
+  ... #377100 @ 55539.942 ms: miss_ratio = 0.01998, load_admit = 0.120, cache_tp = 30614.429, core_tp = 1535.921
+  ... #384470 @ 56040.280 ms: miss_ratio = 0.01990, load_admit = 0.160, cache_tp = 26510.082, core_tp = 1223.173
+  ... #391860 @ 56540.531 ms: miss_ratio = 0.01975, load_admit = 0.190, cache_tp = 36445.739, core_tp = 1103.447
+  ... #399270 @ 57040.884 ms: miss_ratio = 0.01967, load_admit = 0.190, cache_tp = 31233.961, core_tp = 1047.261
+  ... #406560 @ 57541.531 ms: miss_ratio = 0.01959, load_admit = 0.100, cache_tp = 26421.768, core_tp = 1254.375
+  ... #413840 @ 58041.984 ms: miss_ratio = 0.01951, load_admit = 0.110, cache_tp = 25217.173, core_tp = 1166.944
+  ... #421280 @ 58542.135 ms: miss_ratio = 0.01941, load_admit = 0.120, cache_tp = 20009.974, core_tp = 1223.631
+  ... #428730 @ 59042.291 ms: miss_ratio = 0.01941, load_admit = 0.130, cache_tp = 9053.170, core_tp = 1327.585
+  ... #436180 @ 59542.737 ms: miss_ratio = 0.01925, load_admit = 0.090, cache_tp = 36183.743, core_tp = 1294.846
+
+Wait for extra secs... (60 - 75 secs)
+
+  ~~~ #442980 @ 60042.783 ms: miss_ratio = 0.01918, load_admit = 0.030, cache_tp = 25101.654, core_tp = 1151.892
+  ~~~ #442980 @ 60542.847 ms: miss_ratio = 0.01904, load_admit = 0.020, cache_tp = 36091.429, core_tp = 103.987
+  ~~~ #442980 @ 61043.011 ms: miss_ratio = 0.01893, load_admit = 0.030, cache_tp = 24096.091, core_tp = 0.000
+  ~~~ #442980 @ 61543.181 ms: miss_ratio = 0.01879, load_admit = 0.030, cache_tp = 34788.183, core_tp = 15.995
+  ~~~ #442980 @ 62043.611 ms: miss_ratio = 0.01864, load_admit = 0.040, cache_tp = 36648.467, core_tp = 127.890
+  ~~~ #442980 @ 62543.650 ms: miss_ratio = 0.01860, load_admit = 0.020, cache_tp = 18918.533, core_tp = 119.991
+  ~~~ #442980 @ 63044.219 ms: miss_ratio = 0.01852, load_admit = 0.010, cache_tp = 29222.750, core_tp = 23.973
+  ~~~ #442980 @ 63544.230 ms: miss_ratio = 0.01844, load_admit = 0.020, cache_tp = 39095.092, core_tp = 16.000
+  ~~~ #442980 @ 64044.784 ms: miss_ratio = 0.01832, load_admit = 0.020, cache_tp = 38253.613, core_tp = 0.000
+  ~~~ #442980 @ 64545.304 ms: miss_ratio = 0.01824, load_admit = 0.050, cache_tp = 26828.084, core_tp = 39.958
+  ~~~ #442980 @ 65045.800 ms: miss_ratio = 0.01817, load_admit = 0.050, cache_tp = 23081.110, core_tp = 7.992
+  ~~~ #442980 @ 65545.813 ms: miss_ratio = 0.01811, load_admit = 0.010, cache_tp = 21479.458, core_tp = 0.000
+  ~~~ #442980 @ 66046.149 ms: miss_ratio = 0.01800, load_admit = 0.040, cache_tp = 35895.856, core_tp = 31.978
+  ~~~ #442980 @ 66546.499 ms: miss_ratio = 0.01793, load_admit = 0.020, cache_tp = 22408.339, core_tp = 7.994
+  ~~~ #442980 @ 67047.047 ms: miss_ratio = 0.01782, load_admit = 0.040, cache_tp = 34506.137, core_tp = 63.930
+  ~~~ #442980 @ 67547.543 ms: miss_ratio = 0.01771, load_admit = 0.070, cache_tp = 38074.250, core_tp = 15.984
+  ~~~ #442980 @ 68048.009 ms: miss_ratio = 0.01762, load_admit = 0.030, cache_tp = 36741.731, core_tp = 95.911
+  ~~~ #442980 @ 68548.528 ms: miss_ratio = 0.01757, load_admit = 0.050, cache_tp = 31846.969, core_tp = 71.925
+  ~~~ #442980 @ 69048.786 ms: miss_ratio = 0.01749, load_admit = 0.080, cache_tp = 27881.602, core_tp = 7.996
+  ~~~ #442980 @ 69549.016 ms: miss_ratio = 0.01737, load_admit = 0.030, cache_tp = 35687.573, core_tp = 7.996
+  ~~~ #442980 @ 70049.476 ms: miss_ratio = 0.01730, load_admit = 0.040, cache_tp = 24449.506, core_tp = 15.985
+  ~~~ #442980 @ 70549.760 ms: miss_ratio = 0.01722, load_admit = 0.030, cache_tp = 24082.342, core_tp = 23.986
+  ~~~ #442980 @ 71049.804 ms: miss_ratio = 0.01716, load_admit = 0.020, cache_tp = 24141.867, core_tp = 0.000
+  ~~~ #442980 @ 71550.051 ms: miss_ratio = 0.01709, load_admit = 0.030, cache_tp = 34974.730, core_tp = 95.953
+  ~~~ #442980 @ 72050.570 ms: miss_ratio = 0.01700, load_admit = 0.030, cache_tp = 35051.598, core_tp = 39.959
+  ~~~ #442980 @ 72551.109 ms: miss_ratio = 0.01690, load_admit = 0.020, cache_tp = 33987.360, core_tp = 151.836
+  ~~~ #442980 @ 73051.135 ms: miss_ratio = 0.01679, load_admit = 0.040, cache_tp = 34270.246, core_tp = 71.996
+  ~~~ #442980 @ 73551.433 ms: miss_ratio = 0.01669, load_admit = 0.040, cache_tp = 31709.102, core_tp = 15.990
+  ~~~ #442980 @ 74051.891 ms: miss_ratio = 0.01667, load_admit = 0.030, cache_tp = 8240.453, core_tp = 7.993
+  ~~~ #442980 @ 74552.188 ms: miss_ratio = 0.01662, load_admit = 0.010, cache_tp = 20004.099, core_tp = 7.995
+
+Statistics:
+
+   usage | cache |  occupied       8157 pages     99.57 %
+         |       |      free         35 pages      0.42 %
+         |       |     clean        120 pages      1.47 %
+         |       |     dirty       8037 pages     98.52 %
+
+  blocks | cache |   read ->     525909 pages     93.43 %
+         |       |  write <-      36955 pages      6.56 %
+         |       |     total     562864 pages    100.00 %
+         |  core |   read ->      86077 pages     98.36 %
+         |       |  write <-       1432 pages      1.63 %
+         |       |     total      87509 pages    100.00 %
+         |     total             639824 pages    100.00 %
+
+    reqs |  read |     hit $     594878 reqs      92.97 %
+         |       | part miss          0 reqs       0.00 %
+         |       | full miss      10013 reqs       1.56 %
+         |       |     total     604891 reqs      94.54 %
+         | write |     hit $      28754 reqs       4.49 %
+         |       | part miss          0 reqs       0.00 %
+         |       | full miss        474 reqs       0.07 %
+         |       |     total      29228 reqs       4.56 %
+         |  pass |   read ->       5661 reqs       0.88 %
+         |       |  write <-         44 reqs       0.00 %
+         |     total             639824 reqs     100.00 %
+
+  errors | cache |   read ->          0 errors     0.00 %
+         |       |  write <-          0 errors     0.00 %
+         |  core |   read ->          0 errors     0.00 %
+         |       |  write <-          0 errors     0.00 %
+         |     total                  0 errors     0.00 %

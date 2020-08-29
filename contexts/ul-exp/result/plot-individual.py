@@ -56,6 +56,15 @@ for filename in resfiles:
     # print(workload_change_time)
 
 
+    #
+    # Set these according to experiment setup.
+    #
+    
+    miss_ratio_ylim = (-0.1, 0.7)
+    load_admit_ylim = (0.1, 1.1)
+    throughput_ylim = (-1., 100.)
+
+
     fig = plt.figure(filename, constrained_layout=True)
     gs = fig.add_gridspec(5, 1)
 
@@ -65,19 +74,19 @@ for filename in resfiles:
 
     ax1 = fig.add_subplot(gs[1,:])
     ax1.plot(times, miss_ratios, color='k', label="miss_ratio")
-    ax1.set_ylim(-0.1, 0.7)
+    ax1.set_ylim(miss_ratio_ylim)
     ax1.set_title("miss_ratio")
 
     ax2 = fig.add_subplot(gs[2,:])
     ax2.plot(times, load_admits, color='r', label="load_admit")
-    ax2.set_ylim(0.1, 1.1)
+    ax2.set_ylim(load_admit_ylim)
     ax2.set_title("load_admit")
 
     ax3 = fig.add_subplot(gs[3:5,:])
     ax3.plot(times, [tp1+tp2 for tp1, tp2 in zip(cache_tps, core_tps)], color='g', label="Total")
     ax3.plot(times, cache_tps, color='c', label="Cache")
     ax3.plot(times, core_tps, color='b', label="Core")
-    ax3.set_ylim(-1., 100.)
+    ax3.set_ylim(throughput_ylim)
     ax3.set_title("Throughput")
     ax3.set_ylabel("(MiB/s)")
     ax3.legend(loc='center left')
