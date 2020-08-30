@@ -115,14 +115,18 @@ which_page_workload_small()
 /**
  * Wrapper functions for I/O submission.
  */
+
+int user_counter = 0;	
 static int
 submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
           uint32_t len, int dir, ocf_end_io_t callback_func)
 {
+    //printf("to submit a io in user level\n"); 
     ocf_cache_t cache = ocf_core_get_cache(core);
     cache_obj_priv_t *cache_obj_priv = ocf_cache_get_priv(cache);
     struct ocf_io* io;
 
+    //printf("to submit a io in user level\n"); 
     /** Allocate new I/O in queue. */
     io = ocf_core_new_io(core, cache_obj_priv->io_queue, addr,
                          len, dir, 0, 0);
@@ -137,7 +141,12 @@ submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
 
     /** Submit this I/O. */
     ocf_core_submit_io(io);
-
+    //printf("finished submit a io in user level\n"); 
+    
+    user_counter += 1;
+    if (user_counter % 100000 == 0) {
+        printf("Application Finished %d ios\n", user_counter);
+    }
     return 0;
 }
 
@@ -227,7 +236,7 @@ perform_workload_tp_hack(ocf_core_t core, enum bench_cache_mode cache_mode,
         if (ret)
             return ret;
 
-        usleep((int) (delta_ms * 1000));
+        //usleep((int) (delta_ms * 1000));
     } while (cur_time_ms < base_time_ms + 1000.0 * 30);
 
     /**

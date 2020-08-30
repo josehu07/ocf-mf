@@ -13,7 +13,7 @@ PROGRAM=bench
 
 CC=gcc
 CFLAGS=-Wall -I${INCDIR} -I${SRCDIR} -I${SRCDIR}/ocf/env/ -O2 -Wno-stringop-truncation
-LDFLAGS=-lm -lz -pthread
+LDFLAGS=-lm -lz -pthread -laio
 
 
 all: sync

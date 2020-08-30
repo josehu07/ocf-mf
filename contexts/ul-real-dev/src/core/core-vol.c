@@ -139,7 +139,7 @@ _submit_thread_func(void *args)
         // DEBUG("IO: dir = %s, core pos = 0x%08lx, len = %u",
         //       io->dir == OCF_WRITE ? "WR <-" : "RD ->", io->addr, io->bytes);
 
-        switch (io->dir) {
+        /*switch (io->dir) {
         case OCF_WRITE:
             _submit_write_io(io, data, vol_priv->sock_fd, start_time_ms);
             break;
@@ -151,7 +151,7 @@ _submit_thread_func(void *args)
         if (io->dir == OCF_READ) {
             core_log_push_entry(pkg, start_time_ms, get_cur_time_ms(),
                                 io->bytes);
-        }
+        }*/
 
         io->end(io, 0);
     }
@@ -208,7 +208,7 @@ core_vol_open(ocf_volume_t core_vol, void *params)
     env_atomic_set(&should_stop, 0);
 
     /** Start CORE_PARALLELISM submit threads at volume open. */
-    for (i = 0; i < 4; ++i) {
+    for (i = 0; i < 0; ++i) {
         pthread_t submit_thread_id;
         pthread_attr_t submit_thread_attr;
         int *pkg_ptr;
@@ -272,6 +272,10 @@ extern double base_time_ms;
 static void
 core_vol_submit_io(struct ocf_io *io)
 {
+    io->end(io, 0);     /** Unimplemented. */
+    return;
+
+
     struct req_entry *entry;
     int queue_depth;
 

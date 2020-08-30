@@ -13,6 +13,7 @@
 #include <sys/un.h>
 #include <ocf/ocf.h>
 #include <fcntl.h>
+#include <libaio.h>
 
 #include "simfs/simfs-ctx.h"
 #include "cache-obj.h"
@@ -40,6 +41,7 @@ static struct req_entry submit_queue;
 static env_mutex submit_queue_lock;
 static env_completion submit_queue_sem;
 
+static int num_threads = 0;
 
 /**
  * Request header (1st message) format.
@@ -62,6 +64,12 @@ static const int FLASHSIM_DIR_WRITE = 1;
 static env_mutex cache_device_lock;
 
 char * io_buf ;
+io_context_t ctx_;
+int counter = 0;
+
+#define MAX_COUNT  65536
+struct io_event events[MAX_COUNT];
+struct timespec timeout;
 
 /**
  * Routines to read from or write to the storage device.
@@ -106,56 +114,9 @@ _submit_thread_func(void *args)
 
     DEBUG("SUBMIT: submission thread for package %d launched", pkg);
 
+    double last_timestamp = 0.0;
+    int counter = 0;
     while (1) {
-        /** Wait when list is empty. */
-        env_completion_wait(&submit_queue_sem);
-
-        /** Force quit. */
-        if (env_atomic_read(&should_stop) != 0) {
-            env_completion_complete(&submit_queue_sem);
-            pthread_exit(NULL);
-            return NULL;    // Not reached.
-        }
-
-        /** Extract an entry from queue head. */
-        env_mutex_lock(&submit_queue_lock);
-
-        if (list_empty(&submit_queue.head)) {
-            env_mutex_unlock(&submit_queue_lock);
-            continue;
-        }
-
-        entry = list_first_entry(&submit_queue.head, struct req_entry, head);
-        io = entry->io;
-        start_time_ms = entry->start_time_ms;
-
-        list_del(&entry->head);
-        free(entry);
-
-        env_mutex_unlock(&submit_queue_lock);
-
-        /** Process the request. */
-        simfs_data_t *data = ocf_io_get_data(io);
-        cache_vol_priv_t *vol_priv = ocf_volume_get_priv(ocf_io_get_volume(io));
-
-        // DEBUG("IO: dir = %s, cache pos = 0x%08lx, len = %u",
-        //       io->dir == OCF_WRITE ? "WR <-" : "RD ->", io->addr, io->bytes);
-
-        switch (io->dir) {
-        case OCF_WRITE:
-            _submit_write_io(io, data, vol_priv->sock_fd, start_time_ms);
-            break;
-        case OCF_READ:
-            _submit_read_io(io, data, vol_priv->sock_fd, start_time_ms);
-            break;
-        }
-
-        if (io->dir == OCF_READ) {
-            cache_log_push_entry(pkg, start_time_ms, get_cur_time_ms(),
-                                 io->bytes);
-        }
-
-        io->end(io, 0);
     }
 
     // Not reached.
@@ -196,20 +157,16 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
     io_buf = (char *) malloc(sizeof(char) * (4096 * 2));
     ret = posix_memalign((void **)&io_buf, 4096, 4096 * 2); 
     
-    /** Initialize submission queue. */
-    INIT_LIST_HEAD(&submit_queue.head);
-
-    ret = env_mutex_init(&submit_queue_lock);
-    if (ret) {
-        DEBUG("OPEN: queue lock initialization failed");
-        return ret;
+    memset(&ctx_, 0, sizeof(ctx_));
+    if (io_setup(MAX_COUNT, &ctx_) != 0) {
+        printf("io_context_t set failed");
+        exit(1);
     }
-
-    env_completion_init(&submit_queue_sem);
-    env_atomic_set(&should_stop, 0);
+    timeout.tv_sec = 0;
+    timeout.tv_nsec = 100;
 
     /** Start CACHE_PARALLELISM submit threads at volume open. */
-    for (i = 0; i < 4; ++i) {
+    for (i = 0; i < num_threads; ++i) {
         pthread_t submit_thread_id;
         pthread_attr_t submit_thread_attr;
         int *pkg_ptr;
@@ -274,37 +231,44 @@ extern double base_time_ms;
 static void
 cache_vol_submit_io(struct ocf_io *io)
 {
-    struct req_entry *entry;
-    int queue_depth;
-
     /** Address must be page-aligned. */
     if (io->addr % flashsim_page_size != 0) {
         DEBUG("IO: unaligned addr 0x%08lx", io->addr);
         io->end(io, 1);
         return;
     }
+    
+    struct volume_data *data;
 
-    entry = malloc(sizeof(struct req_entry));
-    if (entry == NULL) {
-        DEBUG("IO: push to submit queue failed");
-        return;
+    data = ocf_io_get_data(io);
+    cache_vol_priv_t *vol_priv = ocf_volume_get_priv(ocf_io_get_volume(io));
+
+    //TODO submit async IO
+    struct iocb * p = (struct iocb *)malloc(sizeof(struct iocb));
+    io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes, io->addr);
+    p->data = (void *) io_buf;
+
+    if (io_submit(ctx_, 1, &p) != 1) {
+        io_destroy(ctx_);
+        int errnum = errno;
+	printf("io submit error: %d %s\n", errnum, strerror( errnum ));
+	exit(1);
     }
+    int ret = io_getevents(ctx_, 0, MAX_COUNT, events, &timeout);
+    while (ret < 0) ;
 
-    entry->io = io;
-    entry->start_time_ms = get_cur_time_ms();
 
-    env_mutex_lock(&submit_queue_lock);
-
-    list_add_tail(&entry->head, &submit_queue.head);
-    env_completion_complete(&submit_queue_sem);
-
-    if (DEVICE_LOG_ENABLE) {
-        sem_getvalue(&submit_queue_sem.sem, &queue_depth);
-        fprintf(fdevice, "cache queue: @ %.3lf, depth = %d\n",
-                entry->start_time_ms - base_time_ms, queue_depth);
+    io->end(io, 0);
+    counter += 1;
+    if (counter % 1000000 == 0) {
+        printf("Finished %d ios\n", counter);
     }
+    return;	
+	
 
-    env_mutex_unlock(&submit_queue_lock);
+        
+
+
 }
 
 /**
