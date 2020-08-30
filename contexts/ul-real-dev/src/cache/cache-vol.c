@@ -90,8 +90,6 @@ static int
 _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
                 double start_time_ms)
 {
-    // TODO: use a per thread io_buf? if we care about correctness
-    //printf("a cache read: %ld, size: %d\n", io->addr, io->bytes);
     int sz = pread(sock_fd, io_buf, io->bytes, io->addr);
     assert(sz == io->bytes);
     //memcpy(data->ptr + data->offset, io_buf, io->bytes);
@@ -105,10 +103,6 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
 static void *
 _submit_thread_func(void *args)
 {
-    struct req_entry *entry;
-    struct ocf_io *io;
-    double start_time_ms;
-
     int pkg = *((int *) args);
     free((int *) args);
 
@@ -116,7 +110,27 @@ _submit_thread_func(void *args)
 
     double last_timestamp = 0.0;
     int counter = 0;
+    int ret = 0;
+     
     while (1) {
+        ret = io_getevents(ctx_, 0, MAX_COUNT, events, &timeout);
+        if (ret < 0) {
+            printf("Getevents Error\n");
+            exit(1);
+        }
+
+        if (ret == 0)	
+	    continue;
+
+	counter += ret;
+        
+	if (counter % 1000000 == 0) {
+            double cur_timestamp = get_cur_time_ms();
+            printf("Finished %d ios in last %f ms, throughput: %f iops\n", counter, cur_timestamp - last_timestamp,
+			    counter / (cur_timestamp - last_timestamp) * 1000.0);
+	    counter = 0;
+	    last_timestamp = cur_timestamp;
+        }
     }
 
     // Not reached.
@@ -154,6 +168,8 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
       return 1;
     } 
     vol_priv->sock_fd = fd;
+    
+    /** Prepare for async I/Os. */
     io_buf = (char *) malloc(sizeof(char) * (4096 * 2));
     ret = posix_memalign((void **)&io_buf, 4096, 4096 * 2); 
     
@@ -165,34 +181,32 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
     timeout.tv_sec = 0;
     timeout.tv_nsec = 100;
 
-    /** Start CACHE_PARALLELISM submit threads at volume open. */
-    for (i = 0; i < num_threads; ++i) {
-        pthread_t submit_thread_id;
-        pthread_attr_t submit_thread_attr;
-        int *pkg_ptr;
+    /** Start a I/O completion check threads. */
+    pthread_t submit_thread_id;
+    pthread_attr_t submit_thread_attr;
+    int *pkg_ptr;
+    
+    pkg_ptr = malloc(sizeof(int));
+    *pkg_ptr = 1;
 
-        ret = pthread_attr_init(&submit_thread_attr);
-        if (ret) {
-            DEBUG("OPEN: submit thread %d creation failed", i);
-            return ret;
-        }
+    ret = pthread_attr_init(&submit_thread_attr);
+    if (ret) {
+        DEBUG("OPEN: submit thread %d creation failed", i);
+        return ret;
+    }
 
-        ret = pthread_attr_setdetachstate(&submit_thread_attr,
+    ret = pthread_attr_setdetachstate(&submit_thread_attr,
                                           PTHREAD_CREATE_DETACHED);
-        if (ret) {
-            DEBUG("OPEN: submit thread %d creation failed", i);
-            return ret;
-        }
+    if (ret) {
+        DEBUG("OPEN: submit thread %d creation failed", i);
+        return ret;
+    }
 
-        pkg_ptr = malloc(sizeof(int));
-        *pkg_ptr = i;
-
-        ret = pthread_create(&submit_thread_id, &submit_thread_attr,
+    ret = pthread_create(&submit_thread_id, &submit_thread_attr,
                              _submit_thread_func, (void *) pkg_ptr);
-        if (ret) {
-            DEBUG("OPEN: submit thread %d creation failed", i);
-            return ret;
-        }
+    if (ret) {
+        DEBUG("OPEN: submit thread %d creation failed", i);
+        return ret;
     }
 
     DEBUG("OPEN: name = %s, sock = %s", vol_priv->name, vol_priv->sock_name);
@@ -243,7 +257,7 @@ cache_vol_submit_io(struct ocf_io *io)
     data = ocf_io_get_data(io);
     cache_vol_priv_t *vol_priv = ocf_volume_get_priv(ocf_io_get_volume(io));
 
-    //TODO submit async IO
+    /** Submit async IO to the real device */
     struct iocb * p = (struct iocb *)malloc(sizeof(struct iocb));
     io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes, io->addr);
     p->data = (void *) io_buf;
@@ -254,21 +268,10 @@ cache_vol_submit_io(struct ocf_io *io)
 	printf("io submit error: %d %s\n", errnum, strerror( errnum ));
 	exit(1);
     }
-    int ret = io_getevents(ctx_, 0, MAX_COUNT, events, &timeout);
-    while (ret < 0) ;
 
-
+    // TODO: notify this io ends when its io is complete
     io->end(io, 0);
-    counter += 1;
-    if (counter % 1000000 == 0) {
-        printf("Finished %d ios\n", counter);
-    }
     return;	
-	
-
-        
-
-
 }
 
 /**

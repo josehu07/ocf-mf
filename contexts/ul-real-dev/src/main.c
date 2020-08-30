@@ -364,6 +364,7 @@ main(int argc, char *argv[])
     //cache_sock_name = "cache-sock";
     //core_sock_name  = "core-sock";
     cache_sock_name = "/mnt/optane/ocf_cache";
+    //cache_sock_name = "/mnt/pmem/ocf_cache";
     core_sock_name  = "/mnt/970/ocf_core";
 
     /** Get cache mode and intensity for this round of experiment. */
@@ -437,11 +438,12 @@ main(int argc, char *argv[])
             error("Unable to start monitor thread", ret);
     }
 
-    /** 6. Perform workload. */
+    /** 6. TODO Perform workload with multi-threads. */
     // ret = perform_workload_fuzzy(core, 36000);
     ret = perform_workload_tp_hack(core, cache_mode, intensity);
     if (ret)
       error("Error when performing workload", ret);
+
 
     /** 7. Stop the multi-factor monitor. */
     if (cache_mode == BENCH_CACHE_MODE_MF)

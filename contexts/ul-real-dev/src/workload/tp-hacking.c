@@ -121,12 +121,10 @@ static int
 submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
           uint32_t len, int dir, ocf_end_io_t callback_func)
 {
-    //printf("to submit a io in user level\n"); 
     ocf_cache_t cache = ocf_core_get_cache(core);
     cache_obj_priv_t *cache_obj_priv = ocf_cache_get_priv(cache);
     struct ocf_io* io;
 
-    //printf("to submit a io in user level\n"); 
     /** Allocate new I/O in queue. */
     io = ocf_core_new_io(core, cache_obj_priv->io_queue, addr,
                          len, dir, 0, 0);
@@ -141,12 +139,11 @@ submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
 
     /** Submit this I/O. */
     ocf_core_submit_io(io);
-    //printf("finished submit a io in user level\n"); 
     
-    user_counter += 1;
-    if (user_counter % 100000 == 0) {
-        printf("Application Finished %d ios\n", user_counter);
-    }
+    //user_counter += 1;
+    //if (user_counter % 100000 == 0) {
+    //    printf("Application Finished %d ios\n", user_counter);
+    //}
     return 0;
 }
 
@@ -169,18 +166,30 @@ submit_10_ios_in_a_row(ocf_core_t core, simfs_data_t *simfs_data,
     return 0;
 }
 
+// TODO
+ocf_core_t core;
+enum bench_cache_mode cache_mode;
+int intensity;
+	
+static void *
+tp_hack_thread(void *args)
+{
+}
 
 int
-perform_workload_tp_hack(ocf_core_t core, enum bench_cache_mode cache_mode,
-                         int intensity)
+perform_workload_tp_hack(ocf_core_t core_input, enum bench_cache_mode cache_mode_input,
+                         int intensity_input)
 {
-    /** Must have ENABLE_DATA == false when doing this benchmarking. */
-    if (flashsim_enable_data) {
-        fprintf(stderr, "Recommend having ENABLE_DATA option off "
-                        "when benchmarking.\n");
-        return -1;
+    core = core_input;
+    cache_mode = cache_mode_input;
+    intensity = intensity_input;
+    pthread_t * thread_pool = (pthread_t *)malloc(sizeof(pthread_t) * 2);
+    for (int i = 0; i < 2; i++) {
+        int *arg = (int *)malloc(sizeof(*arg));
+        *arg = i;
+        pthread_create(&thread_pool[i], NULL, tp_hack_thread, (void *)arg);
     }
-
+    
     /** Intensity must be a multiple of 10. */
     if (intensity % 10 != 0) {
         fprintf(stderr, "Intensity must be a multiple of 10.\n");
@@ -320,7 +329,7 @@ perform_workload_tp_hack(ocf_core_t core, enum bench_cache_mode cache_mode,
 
         num_reqs += 10;
 
-        usleep((int) (delta_ms * 1000));
+        //usleep((int) (delta_ms * 1000));
     } while (cur_time_ms < base_time_ms + 1000.0 * 160);
 
     /**
