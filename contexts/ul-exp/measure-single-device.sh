@@ -1,8 +1,8 @@
 #!/bin/bash
 
 
-READ_INTENSITY=10000
-WRITE_INTENSITY=4000
+READ_INTENSITY=30000
+WRITE_INTENSITY=8000
 
 
 echo "Doing cache device throughput measurement..."
