@@ -53,8 +53,8 @@ Clone the repo recursively (there is a submodule - the Flash SSD simulator `flas
 
 ```bash
 $ git clone --recursive git@github.com:josehu07/ocf-mf.git
-$ git submodule update --init --recursive
 $ cd ocf-mf
+$ git submodule update --init --recursive
 ```
 
 Go into the example context `ul-exp` and compile:
