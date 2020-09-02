@@ -16,7 +16,7 @@
 
 
 /** Device log for throughput measurement. */
-void core_log_push_entry(double finish_time_ms, uint32_t bytes);
+void core_log_push_entry(double start_time_ms, double finish_time_ms, uint32_t bytes);
 double core_log_query_throughput(double begin_time_ms, double end_time_ms);
 
 /*=========Kaiwei's Change Start========*/
