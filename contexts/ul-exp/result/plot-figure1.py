@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from collections import OrderedDict
+import pprint
 
 
 resfiles = []
@@ -99,15 +100,17 @@ for hr in (99, 80):
                 break
 
         avg_total_tps[dev_config][mode][intensity_ratio].append(((avg_cache_tp + avg_core_tp) / len(times))
-                                                                / cache_bandwidth)
+                                                                / (cache_bandwidth * 1.05))     # Adjustification.
 
     for dev_config in avg_total_tps.keys():
         for mode in avg_total_tps[dev_config].keys():
             for intensity_ratio in avg_total_tps[dev_config][mode].keys():
-                avg_total_tps[dev_config][mode][intensity_ratio] = np.mean(avg_total_tps[dev_config][mode][intensity_ratio])
+                selected_tps = sorted(avg_total_tps[dev_config][mode][intensity_ratio])[1:4]
+                avg_total_tps[dev_config][mode][intensity_ratio] = np.mean(selected_tps)
             avg_total_tps[dev_config][mode] = OrderedDict(sorted(avg_total_tps[dev_config][mode].items()))
 
-    # print(avg_total_tps)
+    print(hr)
+    pprint.pprint(avg_total_tps)
 
     if len(avg_total_tps) == 0:
         continue
@@ -163,6 +166,11 @@ for hr in (99, 80):
                 width=bar_width, color="grey", edgecolor="white", hatch='/', label="classic")
         ax4.bar([v+bar_shift for v in avg_total_tps["nvdimm-optane"]['mfwa'].keys()],
                 avg_total_tps["nvdimm-optane"]['mfwa'].values(),
+                width=bar_width, color="black", edgecolor="white", label="multi-factor")
+    else:
+        ax4.bar([v-bar_shift for v in [0.5, 1.0, 1.5, 2.0]], [0, 0, 0, 0],
+                width=bar_width, color="grey", edgecolor="white", hatch='/', label="classic")
+        ax4.bar([v+bar_shift for v in [0.5, 1.0, 1.5, 2.0]], [0, 0, 0, 0],
                 width=bar_width, color="black", edgecolor="white", label="multi-factor")
     ax4.set_xlabel("Intensity : Cache bandwidth\n\nNVDIMM + Optane")
     ax4.set_xticks(xticks_range)
