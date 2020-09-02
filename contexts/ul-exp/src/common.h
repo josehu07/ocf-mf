@@ -67,11 +67,11 @@ enum bench_cache_mode {
 /**
  * Enumerate of possible tuning mode
  */
-enum tune_mode {
+typedef enum tune_mode {
     THROUGHPUT,
     LATENCY,
     MODE_NUM,
-};
+}tune_mode_t;
 
 
 #endif

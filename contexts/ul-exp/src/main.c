@@ -420,13 +420,13 @@ main(int argc, char *argv[])
         }
     }
 
-    tune_mode mode;
+    tune_mode_t mode;
     if (strncmp(argv[2], "tp", 2)) {
-        mode = tune_mode.THROUGHPUT;
+        mode = tune_mode_t.THROUGHPUT;
         printf(" Using tune mode: throughput\n");
     }
     else if (strncmp(argv[2], "la", 2)) {
-        mode = tune_mode.LATENCY;
+        mode = tune_mode_t.Latency;
         printf(" Using tune mode: latency\n");
     }
     else

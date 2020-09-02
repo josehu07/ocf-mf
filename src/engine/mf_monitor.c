@@ -214,7 +214,7 @@ bool (*is_better[MODE_NUM]) (double, double) = {
  * considered happened.
  */
 static void
-monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode mode)
+monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mode)
 {
     double la1, la2, la3;
     double stat1, stat2, stat3;
@@ -435,7 +435,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode mode)
  * Monitor thread logic.
  */
 static void *
-monitor_func(void *core_ptr, tune_mode mode)
+monitor_func(void *core_ptr, tune_mode_t mode)
 {
     ocf_core_t core = core_ptr;
 
@@ -472,7 +472,7 @@ monitor_func(void *core_ptr, tune_mode mode)
  * Setup multi-factor switches and sart the monitor thread.
  */
 int
-ocf_mngt_mf_monitor_init(ocf_core_t core, tune_mode mode)
+ocf_mngt_mf_monitor_init(ocf_core_t core, tune_mode_t mode)
 {
     pthread_t monitor_thread_id;
     pthread_attr_t monitor_thread_attr;
