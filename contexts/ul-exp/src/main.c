@@ -383,8 +383,10 @@ main(int argc, char *argv[])
     core_sock_name  = "core-sock";
 
     /** Get cache mode and arguments for this round of experiment. */
-    if (argc < 3)
+    /*================Kaiwei's Change Start=======================*/
+    if (argc < 4)
         prompt_usage_exit();
+    /*================Kaiwei's Change End=======================*/
 
     if (! strncmp(argv[1], "pt", 2))
         cache_mode = BENCH_CACHE_MODE_PT;
@@ -417,6 +419,19 @@ main(int argc, char *argv[])
                 bench_args[i] = argv[i + 3];
         }
     }
+
+    tune_mode mode;
+    if (strncmp(argv[2], "tp", 2)) {
+        mode = tune_mode.THROUGHPUT;
+        printf(" Using tune mode: throughput\n");
+    }
+    else if (strncmp(argv[2], "la", 2)) {
+        mode = tune_mode.LATENCY;
+        printf(" Using tune mode: latency\n");
+    }
+    else
+        prompt_usage_exit();
+    
 
     /** Record boot timespec. */
     clock_gettime(CLOCK_REALTIME, &boot_timespec);
@@ -462,7 +477,7 @@ main(int argc, char *argv[])
     if (cache_mode == BENCH_CACHE_MODE_MFWA
         || cache_mode == BENCH_CACHE_MODE_MFWB
         || cache_mode == BENCH_CACHE_MODE_MFWT) {
-        ret = ocf_mngt_mf_monitor_init(core);
+        ret = ocf_mngt_mf_monitor_init(core, mode);
         if (ret)
             error("Unable to start monitor thread", ret);
     }
