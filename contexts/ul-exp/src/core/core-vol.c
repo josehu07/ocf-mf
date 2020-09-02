@@ -106,7 +106,9 @@ _submit_write_io(struct ocf_io *io, int sock_fd, double start_time_ms)
     /** If haven't, record in log. */
     if (! data->served) {
         data->served = true;
-        core_log_push_entry(get_cur_time_ms(), io->bytes);
+        /*==========Kaiwei's Change Start==========*/
+        core_log_push_entry(start_time_ms, get_cur_time_ms(), io->bytes);
+        /*==========Kaiwei's Change End==========*/
 
         // DEBUG(" _W addr = 0x%08lx, len = %u, data = %.14s",
         //       io->addr, io->bytes,
@@ -165,7 +167,9 @@ _submit_read_io(struct ocf_io *io, int sock_fd, double start_time_ms)
     /** If haven't, record in log. */
     if (! data->served) {
         data->served = true;
-        core_log_push_entry(get_cur_time_ms(), io->bytes);
+        /*==========Kaiwei's Change start==========*/
+        core_log_push_entry(start_time_ms, get_cur_time_ms(), io->bytes);
+        /*==========Kaiwei's Change end==========*/
 
         // DEBUG(" _R addr = 0x%08lx, len = %u, data = %.14s",
         //       io->addr, io->bytes,

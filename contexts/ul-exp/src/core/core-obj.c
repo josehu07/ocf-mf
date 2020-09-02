@@ -62,6 +62,9 @@ remove_core_callback(void *callback_states, int error)
  * latest IOs through this device.
  */
 struct core_log_entry {
+    /*==========Kaiwei's Change start==========*/
+    double start_time_ms;
+    /*==========Kaiwei's Change end==========*/
     double finish_time_ms;
     uint32_t bytes;
 };
@@ -82,7 +85,7 @@ extern double base_time_ms;
  * the log is full. Returns the timestamp for this entry.
  */
 void
-core_log_push_entry(double finish_time_ms, uint32_t bytes)
+core_log_push_entry(double start_time_ms, double finish_time_ms, uint32_t bytes)
 {
     int pos;
 
@@ -90,6 +93,9 @@ core_log_push_entry(double finish_time_ms, uint32_t bytes)
 
     pos = (core_log_tail + 1) % CORE_LOG_SIZE;
 
+    /*==========Kaiwei's Change start==========*/
+    core_log[pos].start_time_ms = start_time_ms;
+    /*==========Kaiwei's Change end==========*/
     core_log[pos].finish_time_ms = finish_time_ms;
     core_log[pos].bytes = bytes;
 
@@ -135,6 +141,35 @@ core_log_query_throughput(double begin_time_ms, double end_time_ms)
     env_rwlock_read_unlock(&core_log_lock);
 
     return (kilobytes * 1000.0) / (end_time_ms - begin_time_ms);
+}
+
+/**
+ * Query the log for latency (ms) of given time interval.
+ */
+double
+core_log_query_latency(double begin_time_ms, double end_time_ms, uint32_t *num)
+{
+   /*To be implemented*/
+    double latency = 0;
+    uint32_t entries_num = 0;
+    env_rwlock_read_lock(&core_log_lock);
+    if (core_log_head >= 0) {
+        int i = core_log_tail + 1;
+
+        do {
+            i = i == 0 ? CORE_LOG_SIZE - 1 : i - 1;
+
+            if (core_log[i].finish_time_ms <= begin_time_ms)
+                break;
+
+            if (core_log[i].finish_time_ms <= end_time_ms)
+                latency += (core_log[i].finish_time_ms - core_log[i].start_time_ms);
+            entries_num ++;
+        } while (i != core_log_head);
+    }
+    env_rwlock_read_unlock(&core_log_lock);
+    *num = entries_num;
+    return latency / entries_num;
 }
 
 /*========== Device log implementation END ==========*/

@@ -33,6 +33,14 @@ void cache_log_push_entry(double end_time_ms, uint32_t bytes);
 double cache_log_query_throughput(double begin_time_ms, double end_time_ms);
 
 
+/*=========Kaiwei's Change Start========*/
+double cache_log_query_latency(double begin_time_ms, double end_time_ms, uint32_t *num);
+/*=========Kaiwei's End Start========*/
+
+
+
+
+
 int cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache,
                     enum bench_cache_mode cache_mode);
 int cache_obj_stop(ocf_cache_t cache);

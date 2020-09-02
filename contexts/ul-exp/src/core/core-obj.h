@@ -19,6 +19,9 @@
 void core_log_push_entry(double finish_time_ms, uint32_t bytes);
 double core_log_query_throughput(double begin_time_ms, double end_time_ms);
 
+/*=========Kaiwei's Change Start========*/
+double core_log_query_latency(double begin_time_ms, double end_time_ms, uint32_t *num);
+/*=========Kaiwei's End Start========*/
 
 int core_obj_setup(ocf_cache_t cache, ocf_core_t *core);
 int core_obj_stop(ocf_core_t core);

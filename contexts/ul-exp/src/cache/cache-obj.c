@@ -62,6 +62,9 @@ cache_stop_callback(ocf_cache_t cache, void *callback_states,
  * latest IOs through this device.
  */
 struct cache_log_entry {
+    /*==========Kaiwei's Change Start==========*/
+    double start_time_ms;
+    /*==========Kaiwei's Change End==========*/
     double finish_time_ms;
     uint32_t bytes;
 };
@@ -82,7 +85,7 @@ extern double base_time_ms;
  * the log is full. Returns the timestamp for this entry.
  */
 void
-cache_log_push_entry(double finish_time_ms, uint32_t bytes)
+cache_log_push_entry(double start_time_ms, double finish_time_ms, uint32_t bytes)
 {
     int pos;
 
@@ -90,6 +93,9 @@ cache_log_push_entry(double finish_time_ms, uint32_t bytes)
 
     pos = (cache_log_tail + 1) % CACHE_LOG_SIZE;
 
+    /*==========Kaiwei's Change Start==========*/
+    cache_log[pos].start_time_ms = start_time_ms;
+    /*==========Kaiwei's Change End==========*/
     cache_log[pos].finish_time_ms = finish_time_ms;
     cache_log[pos].bytes = bytes;
 
@@ -136,6 +142,36 @@ cache_log_query_throughput(double begin_time_ms, double end_time_ms)
 
     return (kilobytes * 1000.0) / (end_time_ms - begin_time_ms);
 }
+
+/**
+ * Query the log for latency (ms) of given time interval.
+ */
+double
+cache_log_query_latency(double begin_time_ms, double end_time_ms, uint32_t *num)
+{
+    /*To be implemented*/
+    double latency = 0;
+    uint32_t entries_num = 0;
+    env_rwlock_read_lock(&cache_log_lock);
+    if (cache_log_head >= 0) {
+        int i = cache_log_tail + 1;
+
+        do {
+            i = i == 0 ? CACHE_LOG_SIZE - 1 : i - 1;
+
+            if (cache_log[i].finish_time_ms <= begin_time_ms)
+                break;
+
+            if (cache_log[i].finish_time_ms <= end_time_ms)
+                latency += (cache_log[i].finish_time_ms - cache_log[i].start_time_ms);
+            entries_num ++;
+        } while (i != cache_log_head);
+    }
+    env_rwlock_read_unlock(&cache_log_lock);
+    *num = entries_num;
+    return latency / entries_num;
+}
+
 
 /*========== Device log implementation END ==========*/
 

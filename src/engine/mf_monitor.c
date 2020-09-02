@@ -161,15 +161,63 @@ monitor_measure_throughput(double load_admit)
     return _get_throughput();
 }
 
+
+
+/*==========Kaiwei's Change Start==========*/
+static inline double
+_get_latency()
+{
+    double cur_time_ms = get_cur_time_ms();
+    double begin_time_ms = cur_time_ms
+                           - (MEASURE_THROUGHPUT_INTERVAL_US / 1000.0);
+    uint32_t cache_number;
+    uint32_t core_number;
+    double cache_latency = cache_log_query_latency(begin_time_ms, cur_time_ms, &cache_number);
+    double core_latency = core_log_query_latency(begin_time_ms, cur_time_ms, &core_number);
+
+    double alpha = (float)cache_number / (float)(cache_number + core_number);
+
+    return alpha * cache_latency + (1 - alpha) * core_latency;
+}
+
+static double
+monitor_measure_latency(double load_admit)
+{
+    monitor_set_load_admit(load_admit);
+    usleep(MEASURE_THROUGHPUT_INTERVAL_US);
+    return _get_latency();
+}
+
+
+
+double (*target_func[MODE_NUM]) (double) = {
+    [THROUGHPUT] monitor_measure_throughput,
+    [LATENCY] monitor_measure_latency,
+};
+
+bool min(double lhs, double rhs) {
+    return lhs <= rhs;
+}
+
+bool max(double lhs, double rhs) {
+    return lhs >= rhs;
+}
+
+bool (*is_better[MODE_NUM]) (double, double) = {
+    [THROUGHPUT] max,
+    [LATENCY] min,
+};
+
+
 /**
  * Repeatedly tune `load_admit` ratio until a workload change is
  * considered happened.
  */
 static void
-monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
+monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode mode)
 {
     double la1, la2, la3;
-    double tp1, tp2, tp3;
+    double stat1, stat2, stat3;
     bool second_chance = true;
     long long int iteration = 0;
 
@@ -182,15 +230,15 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
             fprintf(fmonitor, "  (tune) iter #%lld: load_admit = %.3lf\n",
                     iteration, la2);
         }
-        tp2 = monitor_measure_throughput(la2);
+        stat2 = target_func[mode](la2);
 
         /** Get higher ratio throughput. */
         la3 = la2 + LOAD_ADMIT_TUNING_STEP;
-        tp3 = la3 > 1.0 ? -0.1 : monitor_measure_throughput(la3);
+        stat3 = la3 > 1.0 ? -0.1 : target_func[mode](la3);
 
         /** Get lower ratio throughput. */
         la1 = la2 - LOAD_ADMIT_TUNING_STEP;
-        tp1 = la1 < 0.0 ? -0.1 : monitor_measure_throughput(la1);
+        stat1 = la1 < 0.0 ? -0.1 : target_func[mode](la1);
 
         monitor_set_load_admit(la2);    /** Recover. */
 
@@ -210,24 +258,26 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
             /**
              * Middle ratio yields best throughput, goto intensity check.
              */
-            if (tp2 >= tp1 && tp2 >= tp3) {
+            if (is_better[mode](stat2, stat1) && is_better[mode](stat2, stat3)) {
                 monitor_set_load_admit(la2);
                 break;
             }
+
+
 
             /**
              * Higher ratio yields best throughput, then shift to higher
              * `load_admit` value.
              */
-            if (tp3 >= tp1 && tp3 >= tp2) {
+            if (is_better[mode](stat3, stat1) && is_better[mode](stat3, stat2)) {
                 if (la3 >= 1.0) {
                     monitor_set_load_admit(1.0);
                     break;
                 } else {
-                    la1 = la2; tp1 = tp2;
-                    la2 = la3; tp2 = tp3;
+                    la1 = la2; stat1 = stat2;
+                    la2 = la3; stat2 = stat3;
                     la3 = la3 + LOAD_ADMIT_TUNING_STEP;
-                    tp3 = la3 > 1.0 ? -0.1 : monitor_measure_throughput(la3);
+                    stat3 = la3 > 1.0 ? -0.1 : target_func[mode](la3);
                     continue;
                 }
             }
@@ -236,15 +286,15 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
              * Lower ratio yields best throughput, then shift to lower
              * `load_admit` value.
              */
-            if (tp1 >= tp2 && tp1 >= tp3) {
+            if (is_better[mode](stat1, stat2) && is_better[mode](stat1, stat3)) {
                 if (la1 <= 0.0) {
                     monitor_set_load_admit(0.0);
                     break;
                 } else {
-                    la3 = la2; tp3 = tp2;
-                    la2 = la1; tp2 = tp1;
+                    la3 = la2; stat3 = stat2;
+                    la2 = la1; stat2 = stat1;
                     la1 = la1 - LOAD_ADMIT_TUNING_STEP;
-                    tp1 = la1 < 0.0 ? -0.1 : monitor_measure_throughput(la1);
+                    stat1 = la1 < 0.0 ? -0.1 : target_func[mode](la1);
                     continue;
                 }
             }
@@ -268,12 +318,124 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
         }
     }
 }
+/*==========Kaiwei's Change End==========*/
+
+// /**
+//  * Repeatedly tune `load_admit` ratio until a workload change is
+//  * considered happened.
+//  */
+// static void
+// monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core)
+// {
+//     double la1, la2, la3;
+//     double tp1, tp2, tp3;
+//     bool second_chance = true;
+//     long long int iteration = 0;
+
+//     while (1) {
+//         iteration++;
+
+//         /** Get middle ratio (current `load_admit`) throughput. */
+//         la2 = monitor_query_load_admit();
+//         if (MONITOR_LOG_ENABLE && iteration % 10 == 0) {
+//             fprintf(fmonitor, "  (tune) iter #%lld: load_admit = %.3lf\n",
+//                     iteration, la2);
+//         }
+//         tp2 = monitor_measure_throughput(la2);
+
+//         /** Get higher ratio throughput. */
+//         la3 = la2 + LOAD_ADMIT_TUNING_STEP;
+//         tp3 = la3 > 1.0 ? -0.1 : monitor_measure_throughput(la3);
+
+//         /** Get lower ratio throughput. */
+//         la1 = la2 - LOAD_ADMIT_TUNING_STEP;
+//         tp1 = la1 < 0.0 ? -0.1 : monitor_measure_throughput(la1);
+
+//         monitor_set_load_admit(la2);    /** Recover. */
+
+//         /** Slope following loop. */
+//         while (1) {
+//             /**
+//              * Workload change check:
+//              * If detected workload change, quit and re-optimize.
+//              */
+//             double miss_ratio = _get_miss_ratio(core);
+//             if (miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD) {
+//                 if (MONITOR_LOG_ENABLE)
+//                     fprintf(fmonitor, "  (tune) miss ratio too high, quit\n");
+//                 return;
+//             }
+
+//             /**
+//              * Middle ratio yields best throughput, goto intensity check.
+//              */
+//             if (tp2 >= tp1 && tp2 >= tp3) {
+//                 monitor_set_load_admit(la2);
+//                 break;
+//             }
+
+//             /**
+//              * Higher ratio yields best throughput, then shift to higher
+//              * `load_admit` value.
+//              */
+//             if (tp3 >= tp1 && tp3 >= tp2) {
+//                 if (la3 >= 1.0) {
+//                     monitor_set_load_admit(1.0);
+//                     break;
+//                 } else {
+//                     la1 = la2; tp1 = tp2;
+//                     la2 = la3; tp2 = tp3;
+//                     la3 = la3 + LOAD_ADMIT_TUNING_STEP;
+//                     tp3 = la3 > 1.0 ? -0.1 : monitor_measure_throughput(la3);
+//                     continue;
+//                 }
+//             }
+
+//             /**
+//              * Lower ratio yields best throughput, then shift to lower
+//              * `load_admit` value.
+//              */
+//             if (tp1 >= tp2 && tp1 >= tp3) {
+//                 if (la1 <= 0.0) {
+//                     monitor_set_load_admit(0.0);
+//                     break;
+//                 } else {
+//                     la3 = la2; tp3 = tp2;
+//                     la2 = la1; tp2 = tp1;
+//                     la1 = la1 - LOAD_ADMIT_TUNING_STEP;
+//                     tp1 = la1 < 0.0 ? -0.1 : monitor_measure_throughput(la1);
+//                     continue;
+//                 }
+//             }
+//         }
+
+//         /**
+//          * Intensity check:
+//          * If client's request intensity cannot fill cache bandwidth, then fall
+//          * back to classic caching.
+//          */
+//         if (monitor_query_load_admit() == 1.0) {
+//             if (second_chance) {    /** Give a second chance. */
+//                 second_chance = false;
+//                 continue;
+//             } else {
+//                 if (MONITOR_LOG_ENABLE)
+//                     fprintf(fmonitor, "  (tune) load_admit stays 100%%, "
+//                                       "quit\n");
+//                 return;
+//             }
+//         }
+//     }
+// }
+
+
+
 
 /**
  * Monitor thread logic.
  */
 static void *
-monitor_func(void *core_ptr)
+monitor_func(void *core_ptr, tune_mode mode)
 {
     ocf_core_t core = core_ptr;
 
@@ -297,7 +459,7 @@ monitor_func(void *core_ptr)
             fprintf(fmonitor, "  (tune) turn off data_admit & start "
                               "tuning\n");
         }
-        monitor_tune_load_admit(base_miss_ratio, core);
+        monitor_tune_load_admit(base_miss_ratio, core, mode);
     }
 
     return NULL;
@@ -310,7 +472,7 @@ monitor_func(void *core_ptr)
  * Setup multi-factor switches and sart the monitor thread.
  */
 int
-ocf_mngt_mf_monitor_init(ocf_core_t core)
+ocf_mngt_mf_monitor_init(ocf_core_t core, tune_mode mode)
 {
     pthread_t monitor_thread_id;
     pthread_attr_t monitor_thread_attr;
@@ -336,7 +498,7 @@ ocf_mngt_mf_monitor_init(ocf_core_t core)
 
     /** Create the monitor thread. */
     ret = pthread_create(&monitor_thread_id, &monitor_thread_attr,
-                         monitor_func, (void *) core);
+                         monitor_func, (void *) core, mode);
     if (ret)
         return ret;
 
