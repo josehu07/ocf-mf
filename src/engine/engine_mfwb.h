@@ -17,7 +17,6 @@
 #define ENGINE_MFWB_H_
 
 
-
 #include "../ocf_request.h"
 
 

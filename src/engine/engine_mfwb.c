@@ -9,7 +9,7 @@
 
 /*========== [Orthus FLAG BEGIN] ==========*/
 
-#include <stdbool.h>
+#include <linux/random.h>
 #include "ocf/ocf.h"
 #include "../ocf_cache_priv.h"
 #include "../ocf_request.h"
@@ -36,16 +36,22 @@
  * These two switches should be controlled by a monitor, but for
  * now hardcoded into engine.
  */
-static inline bool data_admit_allow()
+static inline bool data_admit_allow(void)
 {
     return monitor_query_data_admit();
 }
 
-static inline bool load_admit_allow()
+static inline bool load_admit_allow(void)
 {
-    double load_admit = monitor_query_load_admit();
+    int load_admit = monitor_query_load_admit();
 
-    return (((double) rand()) / RAND_MAX) <= load_admit; 
+    int rand;
+    unsigned prob;
+
+    get_random_bytes(&rand, sizeof(int));
+    prob = ((unsigned) (rand % 100)) % 100;
+
+    return prob <= load_admit;
 }
 
 

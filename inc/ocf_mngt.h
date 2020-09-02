@@ -1107,15 +1107,20 @@ void ocf_mngt_core_pool_remove(ocf_ctx_t ctx, ocf_volume_t volume);
 
 /*========== [Orthus FLAG BEGIN] ==========*/
 
+/** Start error codes. */
+#define MF_MONITOR_START_ERR_CACHE_STAT 13
+#define MF_MONITOR_START_ERR_CORE_STAT  14
+#define MF_MONITOR_START_ERR_THREAD_RUN 15
+
 /**
  * Setup multi-factor switches and sart the monitor thread.
  */
-int ocf_mngt_mf_monitor_init(ocf_core_t core);
+int ocf_mngt_mf_monitor_start(ocf_core_t core);
 
 /**
  * For the context to gracefully stop the monitor thread.
  */
-void ocf_mngt_mf_monitor_stop();
+void ocf_mngt_mf_monitor_stop(void);
 
 /*========== [Orthus FLAG END] ==========*/
 
