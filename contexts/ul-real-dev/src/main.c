@@ -220,7 +220,11 @@ _print_statistics(struct ocf_stats_usage *stats_usage,
 static void
 _read_cpu_frequency()
 {
-    char *line = NULL;
+    
+    cpu_freq_mhz = 2300;
+
+    // Kan: this introduced a lot variance of results since per core clock rate vary over time	
+    /*char *line = NULL;
     size_t len = 0;
     ssize_t rlen = 0;
 
@@ -237,6 +241,7 @@ _read_cpu_frequency()
 
     if (cpu_freq_mhz <= 0.0)
         error("Invalid CPU frequency MHz number", 1);
+    */
     printf("  CPU frequency: %.3lf MHz\n", cpu_freq_mhz);
 }
 
@@ -394,6 +399,11 @@ main(int argc, char *argv[])
     /** Read device config files. */
     _read_cache_device_config();
     _read_core_device_config();
+
+    // cache capacity bytes too small will get the io_getevents merge io requests
+    //cache_capacity_bytes = 1 * 1024 * 1024 * 1024; 
+    //core_capacity_bytes = 10 * 10 * 1024 * 1024 * 1024;
+
 
     ENV_BUG_ON(flashsim_page_size != PAGE_SIZE);
 

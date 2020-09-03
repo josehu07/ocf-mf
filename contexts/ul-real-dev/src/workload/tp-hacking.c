@@ -80,10 +80,10 @@ _get_core_throughput(double begin_time_ms, double end_time_ms)
 int cache_capacity = 0;
 int workload_size = 0;
 
-static unsigned int g_seed = 2333;
+unsigned int workload_g_seed = 2333;
 inline int fastrand() {
-  g_seed = (214013*g_seed+2531011);
-  return (g_seed>>16)&0x7FFF;
+  workload_g_seed = (214013*workload_g_seed+2531011);
+  return (workload_g_seed>>16)&0x7FFF;
 }
 
 static int
@@ -168,7 +168,6 @@ submit_10_ios_in_a_row(ocf_core_t core, simfs_data_t *simfs_data,
     for (i = 0; i < 10; ++i) {
 	int dir = OCF_READ;
         uint32_t size = PAGE_SIZE;
-        //TODO rand() every time perhaps too slow?
 	uint64_t addr = which_page_workload_fast() * PAGE_SIZE;
 
         ret = submit_io(core, simfs_data, addr, size, dir, callback_func);
@@ -198,14 +197,18 @@ tp_hack_thread(void *args)
     double local_cur_timestamp;
     do {
         ret = submit_10_ios_in_a_row(core, data, read_cmpl_callback);
-    
+        if (ret !=0) {
+	    printf("Submit 10 ios with error\n");
+	}
+
+	//for (int i = 1; i < 10000; i++) ;
 	local_counter += 10;
         if (local_counter % 1000000 == 0) {
 	    local_cur_timestamp = get_cur_time_ms();
             printf("Application thread %d Finished %d ios, in last %f ms, throughput: %f iops\n", thread_id, local_counter, local_cur_timestamp - local_last_timestamp,
 			(local_counter) / (local_cur_timestamp - local_last_timestamp) * 1000);
 	    local_counter = 0;
-	    local_last_timestamp = local_cur_timestamp;
+	    local_last_timestamp = get_cur_time_ms();
         }
     } while (1);
     

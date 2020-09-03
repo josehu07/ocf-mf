@@ -65,7 +65,6 @@ static env_mutex cache_device_lock;
 
 char * io_buf ;
 io_context_t ctx_;
-int counter = 0;
 
 //#define MAX_COUNT  65536
 #define MAX_COUNT  32000
@@ -127,17 +126,17 @@ _completion_thread_func(void *args)
             exit(1);
         }
 
-        if (ret == 0)	
+	if (ret == 0)	
 	    continue;
         
 	counter += ret;
         
 	if (counter % 1000000 == 0) {
-            double cur_timestamp = get_cur_time_ms();
-            printf("Finished %d ios in last %f ms, throughput: %f iops\n", counter, cur_timestamp - last_timestamp,
+	    double cur_timestamp = get_cur_time_ms();
+	    printf("Finished %d ios in last %f ms, throughput: %f iops\n", counter, cur_timestamp - last_timestamp,
 			    counter / (cur_timestamp - last_timestamp) * 1000.0);
 	    counter = 0;
-	    last_timestamp = cur_timestamp;
+	    last_timestamp = get_cur_time_ms();
         }
     }
 
@@ -167,9 +166,11 @@ _submit_thread_func(void *args)
 	struct iocb * p = (struct iocb *)malloc(sizeof(struct iocb));
         //io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes * 2, io->addr);
         // this get higher bw, perhaps because the cache size is too small
-        //io_prep_pread(p, cache_sock_fd, io_buf, 4096, io_addrs[next_io] + (fastrand() % 10000) * 4096);
-        io_prep_pread(p, cache_sock_fd, io_buf, 4096, io_addrs[next_io]);
-        p->data = (void *) io_buf;
+	
+        //io_prep_pread(p, cache_sock_fd, io_buf, 4096, (fastrand() % 1000000) * 4096);
+        //io_prep_pread(p, cache_sock_fd, io_buf, 4096, (counter * (thread_id+1) % 1000000) * 4096);
+	io_prep_pread(p, cache_sock_fd, io_buf, 4096, io_addrs[next_io]);
+	p->data = (void *) io_buf;
     
         if (io_submit(ctx_, 1, &p) != 1) {
             io_destroy(ctx_);
@@ -177,7 +178,8 @@ _submit_thread_func(void *args)
 	    printf("io submit error: %d %s\n", errnum, strerror( errnum ));
 	    exit(1);
         }
-	//printf("thread %d, to submit an IO: %d, %ld\n", thread_id, next_io, io_addrs[next_io]);
+        counter += 1;
+	//printf("thread %d, to submit an IO: %d, %ld\n", thread_id, counter, (counter * thread_id % 1000000));
     }
 
     // Not reached.
@@ -296,7 +298,7 @@ extern double base_time_ms;
  * Submit an IO request to volume.
  * Here we simply push to the tail of queue.
  */
-static unsigned int g_seed = 2333;
+unsigned int g_seed = 2333;
 inline int fastrand() {
   g_seed = (214013*g_seed+2531011);
   return (g_seed>>16)&0x7FFF;
@@ -320,6 +322,8 @@ cache_vol_submit_io(struct ocf_io *io)
     io_addrs[env_atomic_read(&last_io_pointer) % IO_QUEUE_SIZE] = io->addr; 
     env_atomic_inc(&last_io_pointer);
 
+    
+    //usleep(10000);
     io->end(io, 0);
     return;	
 }
