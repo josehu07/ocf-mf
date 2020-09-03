@@ -67,7 +67,8 @@ char * io_buf ;
 io_context_t ctx_;
 int counter = 0;
 
-#define MAX_COUNT  65536
+//#define MAX_COUNT  65536
+#define MAX_COUNT  32000
 struct io_event events[MAX_COUNT];
 struct timespec timeout;
 
@@ -121,7 +122,7 @@ _submit_thread_func(void *args)
 
         if (ret == 0)	
 	    continue;
-
+        
 	counter += ret;
         
 	if (counter % 1000000 == 0) {
@@ -168,10 +169,10 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
       return 1;
     } 
     vol_priv->sock_fd = fd;
-    
+   
     /** Prepare for async I/Os. */
-    io_buf = (char *) malloc(sizeof(char) * (4096 * 2));
-    ret = posix_memalign((void **)&io_buf, 4096, 4096 * 2); 
+    io_buf = (char *) malloc(sizeof(char) * (4096 * 32));
+    ret = posix_memalign((void **)&io_buf, 4096, 4096 * 32); 
     
     memset(&ctx_, 0, sizeof(ctx_));
     if (io_setup(MAX_COUNT, &ctx_) != 0) {
@@ -242,9 +243,16 @@ extern double base_time_ms;
  * Submit an IO request to volume.
  * Here we simply push to the tail of queue.
  */
+static unsigned int g_seed = 2333;
+inline int fastrand() {
+  g_seed = (214013*g_seed+2531011);
+  return (g_seed>>16)&0x7FFF;
+}
+	
 static void
 cache_vol_submit_io(struct ocf_io *io)
 {
+    
     /** Address must be page-aligned. */
     if (io->addr % flashsim_page_size != 0) {
         DEBUG("IO: unaligned addr 0x%08lx", io->addr);
@@ -258,18 +266,20 @@ cache_vol_submit_io(struct ocf_io *io)
     cache_vol_priv_t *vol_priv = ocf_volume_get_priv(ocf_io_get_volume(io));
 
     /** Submit async IO to the real device */
+    for (int i = 0; i <= 1; i++) {
     struct iocb * p = (struct iocb *)malloc(sizeof(struct iocb));
-    io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes, io->addr);
+    //io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes * 2, io->addr);
+    // this get higher bw, perhaps because the cache size is too small
+    io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes*2, io->addr + (fastrand() % 10000) * 4096);
     p->data = (void *) io_buf;
-
+    
     if (io_submit(ctx_, 1, &p) != 1) {
         io_destroy(ctx_);
         int errnum = errno;
 	printf("io submit error: %d %s\n", errnum, strerror( errnum ));
 	exit(1);
     }
-
-    // TODO: notify this io ends when its io is complete
+    }
     io->end(io, 0);
     return;	
 }

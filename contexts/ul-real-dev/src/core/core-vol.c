@@ -181,11 +181,11 @@ core_vol_open(ocf_volume_t core_vol, void *params)
     vol_priv->name = ocf_uuid_to_str(uuid);
     
     /** Open real device(file). */
-    vol_priv->sock_name = cache_sock_name;
-    printf("cache sock name: %s, size: %ld \n", cache_sock_name, cache_capacity_bytes);
+    vol_priv->sock_name = core_sock_name;
+    printf("core sock name: %s, size: %ld \n", core_sock_name, core_capacity_bytes);
     //remove(cache_sock_name);
-    int fd = open(cache_sock_name, O_RDWR | O_DIRECT | O_CREAT, 0);      // O_DIRECT
-    //int td = ftruncate(fd, cache_capacity_bytes);
+    int fd = open(core_sock_name, O_RDWR | O_DIRECT | O_CREAT, 0);      // O_DIRECT
+    //int td = ftruncate(fd, core_capacity_bytes);
     int td = 0;
     if (fd < 0 || td < 0) {
       printf("Raw Device Open failed\n");

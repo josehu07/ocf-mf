@@ -76,14 +76,31 @@ _get_core_throughput(double begin_time_ms, double end_time_ms)
 /**
  * Define a workload - choosing a page.
  */
-static int
-which_page_workload_small()
-{
-    const int cache_capacity = cache_capacity_bytes / PAGE_SIZE;
-    const int workload_size = (int) (0.1 * cache_capacity);
 
-    return rand() % workload_size;
+int cache_capacity = 0;
+int workload_size = 0;
+
+static unsigned int g_seed = 2333;
+inline int fastrand() {
+  g_seed = (214013*g_seed+2531011);
+  return (g_seed>>16)&0x7FFF;
 }
+
+static int
+which_page_workload_fast()
+{
+    return fastrand() % workload_size ;
+}
+
+//static int
+//which_page_workload_small()
+//{
+//    const int cache_capacity = cache_capacity_bytes / PAGE_SIZE;
+//    const int workload_size = (int) (0.1 * cache_capacity);
+
+//    return rand() % workload_size;
+//}
+
 
 // static int
 // which_page_workload_1st()
@@ -116,7 +133,6 @@ which_page_workload_small()
  * Wrapper functions for I/O submission.
  */
 
-int user_counter = 0;	
 static int
 submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
           uint32_t len, int dir, ocf_end_io_t callback_func)
@@ -140,10 +156,6 @@ submit_io(ocf_core_t core, simfs_data_t *simfs_data, uint64_t addr,
     /** Submit this I/O. */
     ocf_core_submit_io(io);
     
-    //user_counter += 1;
-    //if (user_counter % 100000 == 0) {
-    //    printf("Application Finished %d ios\n", user_counter);
-    //}
     return 0;
 }
 
@@ -154,214 +166,84 @@ submit_10_ios_in_a_row(ocf_core_t core, simfs_data_t *simfs_data,
     int i, ret;
 
     for (i = 0; i < 10; ++i) {
-        int dir = OCF_READ;
+	int dir = OCF_READ;
         uint32_t size = PAGE_SIZE;
-        uint64_t addr = which_page_workload_small() * PAGE_SIZE;
+        //TODO rand() every time perhaps too slow?
+	uint64_t addr = which_page_workload_fast() * PAGE_SIZE;
 
         ret = submit_io(core, simfs_data, addr, size, dir, callback_func);
-        if (ret)
+	if (ret)
             return ret;
     }
 
     return 0;
 }
 
-// TODO
 ocf_core_t core;
 enum bench_cache_mode cache_mode;
 int intensity;
+int num_threads = 1;
 	
-static void *
+void *
 tp_hack_thread(void *args)
 {
+    printf("Started a tp hacking workload thread!\n");
+    int thread_id = *((int *)args); 
+    usleep(1000000); 
+    simfs_data_t *data = simfs_data_alloc(1);
+    int ret;
+
+    int local_counter = 0;
+    double local_last_timestamp = 0.0;
+    double local_cur_timestamp;
+    do {
+        ret = submit_10_ios_in_a_row(core, data, read_cmpl_callback);
+    
+	local_counter += 10;
+        if (local_counter % 1000000 == 0) {
+	    local_cur_timestamp = get_cur_time_ms();
+            printf("Application thread %d Finished %d ios, in last %f ms, throughput: %f iops\n", thread_id, local_counter, local_cur_timestamp - local_last_timestamp,
+			(local_counter) / (local_cur_timestamp - local_last_timestamp) * 1000);
+	    local_counter = 0;
+	    local_last_timestamp = local_cur_timestamp;
+        }
+    } while (1);
+    
+    simfs_data_free(data);
+    return NULL;
 }
 
 int
 perform_workload_tp_hack(ocf_core_t core_input, enum bench_cache_mode cache_mode_input,
                          int intensity_input)
 {
-    core = core_input;
-    cache_mode = cache_mode_input;
-    intensity = intensity_input;
-    pthread_t * thread_pool = (pthread_t *)malloc(sizeof(pthread_t) * 2);
-    for (int i = 0; i < 2; i++) {
-        int *arg = (int *)malloc(sizeof(*arg));
-        *arg = i;
-        pthread_create(&thread_pool[i], NULL, tp_hack_thread, (void *)arg);
-    }
+    cache_capacity = cache_capacity_bytes / PAGE_SIZE;
+    workload_size = (int) (0.1 * cache_capacity);
     
     /** Intensity must be a multiple of 10. */
     if (intensity % 10 != 0) {
         fprintf(stderr, "Intensity must be a multiple of 10.\n");
         return -1;
     }
-
-    simfs_data_t *data = simfs_data_alloc(1);
-    int ret;
-
-    /**
-     * We will issue 10 requests in a row every time the benchmarking code
-     * wakes up. This makes the actual sleep time between wake ups more
-     * reasonable.
-     */
+    
+    /** Start multiple workload threads */
+    core = core_input;
+    cache_mode = cache_mode_input;
+    intensity = intensity_input;
     intensity /= 10;
-    double delta_ms = (1000.0 / (double) intensity);
+    
+    pthread_t * thread_pool = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
+    for (int i = 0; i < num_threads; i++) {
+        int *arg = (int *)malloc(sizeof(*arg));
+        *arg = i;
+        pthread_create(&thread_pool[i], NULL, tp_hack_thread, (void *)arg);
+    }
+    
+    for (int i = 0; i < num_threads; i++) {
+        pthread_join(thread_pool[i], NULL);
+    }
 
-    base_time_ms = get_cur_time_ms();
-    double cur_time_ms = base_time_ms;
-    double log_interval_ms = 0.0;
-
-    int num_reqs = 0;
-
-    /**
-     * Stage 1 -
-     *   The first 30 secs are totally unstable.
-     */
-    printf("\nBegin stabilizing stage... (0 - 30 secs)\n\n");
-
-    do {
-        double new_time_ms = get_cur_time_ms();
-        log_interval_ms += new_time_ms - cur_time_ms;
-        cur_time_ms = new_time_ms;
-
-        if (log_interval_ms > 500.0) {
-            printf("  *** #%d @ %.3lf ms: "
-                   "miss_ratio = %.5lf, "
-                   "load_admit = %.3lf, "
-                   "cache_tp = %.3lf, "
-                   "core_tp = %.3lf\n",
-                   num_reqs, cur_time_ms - base_time_ms,
-                   _get_miss_ratio(core),
-                   _get_load_admit(),
-                   _get_cache_throughput(cur_time_ms - log_interval_ms,
-                                         cur_time_ms),
-                   _get_core_throughput(cur_time_ms - log_interval_ms,
-                                        cur_time_ms));
-
-            log_interval_ms = 0.0;
-        }
-
-        ret = submit_10_ios_in_a_row(core, data, read_cmpl_callback);
-        if (ret)
-            return ret;
-
-        //usleep((int) (delta_ms * 1000));
-    } while (cur_time_ms < base_time_ms + 1000.0 * 30);
-
-    /**
-     * Stage 2 -
-     *   Measure delta overhead in 30 - 60 secs region. Then, adjust delta
-     *   to be accurate.
-     */
-    printf("\nMeasuring delta overhead... (30 - 60 secs)\n\n");
-
-    double avg_submit_elapsed_ms = 0.0;
-    int count = 0;
-
-    do {
-        double submit_start_ms = get_cur_time_ms();
-
-        double new_time_ms = get_cur_time_ms();
-        log_interval_ms += new_time_ms - cur_time_ms;
-        cur_time_ms = new_time_ms;
-
-        if (log_interval_ms > 500.0) {
-            printf("  ??? #%d @ %.3lf ms: "
-                   "miss_ratio = %.5lf, "
-                   "load_admit = %.3lf, "
-                   "cache_tp = %.3lf, "
-                   "core_tp = %.3lf\n",
-                   num_reqs, cur_time_ms - base_time_ms,
-                   _get_miss_ratio(core),
-                   _get_load_admit(),
-                   _get_cache_throughput(cur_time_ms - log_interval_ms,
-                                         cur_time_ms),
-                   _get_core_throughput(cur_time_ms - log_interval_ms,
-                                        cur_time_ms));
-
-            log_interval_ms = 0.0;
-        }
-
-        ret = submit_10_ios_in_a_row(core, data, read_cmpl_callback);
-        if (ret)
-            return ret;
-
-        avg_submit_elapsed_ms += get_cur_time_ms() - submit_start_ms;
-        count++;
-
-        usleep((int) (delta_ms * 1000));
-    } while (cur_time_ms < base_time_ms + 1000.0 * 60);
-
-    avg_submit_elapsed_ms /= count;
-    delta_ms -= avg_submit_elapsed_ms;
-
-    /**
-     * Stage 3 -
-     *   Perform the accurate experiment for 100 secs.
-     */
-    printf("\nStart the experiment... (60 - 160 secs)\n\n");
-
-    do {
-        double new_time_ms = get_cur_time_ms();
-        log_interval_ms += new_time_ms - cur_time_ms;
-        cur_time_ms = new_time_ms;
-
-        if (log_interval_ms > 500.0) {
-            printf("  ... #%d @ %.3lf ms: "
-                   "miss_ratio = %.5lf, "
-                   "load_admit = %.3lf, "
-                   "cache_tp = %.3lf, "
-                   "core_tp = %.3lf\n",
-                   num_reqs, cur_time_ms - base_time_ms,
-                   _get_miss_ratio(core),
-                   _get_load_admit(),
-                   _get_cache_throughput(cur_time_ms - log_interval_ms,
-                                         cur_time_ms),
-                   _get_core_throughput(cur_time_ms - log_interval_ms,
-                                        cur_time_ms));
-
-            log_interval_ms = 0.0;
-        }
-
-        ret = submit_10_ios_in_a_row(core, data, read_cmpl_callback);
-        if (ret)
-            return ret;
-
-        num_reqs += 10;
-
-        //usleep((int) (delta_ms * 1000));
-    } while (cur_time_ms < base_time_ms + 1000.0 * 160);
-
-    /**
-     * Stage 4 -
-     *   Wait for some extra secs.
-     */
-    printf("\nWait for extra secs... (160 - 180 secs)\n\n");
-
-    do {
-        double new_time_ms = get_cur_time_ms();
-        log_interval_ms += new_time_ms - cur_time_ms;
-        cur_time_ms = new_time_ms;
-
-        if (log_interval_ms > 500.0) {
-            printf("  ~~~ #%d @ %.3lf ms: "
-                   "miss_ratio = %.5lf, "
-                   "load_admit = %.3lf, "
-                   "cache_tp = %.3lf, "
-                   "core_tp = %.3lf\n",
-                   num_reqs, cur_time_ms - base_time_ms,
-                   _get_miss_ratio(core),
-                   _get_load_admit(),
-                   _get_cache_throughput(cur_time_ms - log_interval_ms,
-                                         cur_time_ms),
-                   _get_core_throughput(cur_time_ms - log_interval_ms,
-                                        cur_time_ms));
-
-            log_interval_ms = 0.0;
-        }
-
-        usleep((int) (delta_ms * 1000));
-    } while (cur_time_ms < base_time_ms + 1000.0 * 180);
+    /** Wait multiple workload threads to stop*/
 
     fflush(stdout);
 
@@ -369,7 +251,6 @@ perform_workload_tp_hack(ocf_core_t core_input, enum bench_cache_mode cache_mode
     cache_vol_force_stop();
     core_vol_force_stop();
 
-    simfs_data_free(data);
 
     return 0;
 }
