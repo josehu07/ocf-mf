@@ -13,6 +13,7 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
+#include <linux/time.h>
 #include "ocf/ocf.h"
 #include "cache_engine.h"
 #include "engine_debug.h"
@@ -133,33 +134,59 @@ file_read(struct file *file, unsigned long long offset, unsigned char *data,
 }
 
 
+/**
+ * Kernel timing utility.
+ */
+static struct timeval boot_tv;
+
+static int64_t
+_get_cur_time_ms(void)
+{
+    struct timeval cur_tv;
+    int64_t cur_time_ms;
+
+    do_gettimeofday(&cur_tv);
+
+    cur_time_ms = (cur_tv.tv_sec - boot_tv.tv_sec) * 1000
+                  + (cur_tv.tv_usec - boot_tv.tv_usec) / 1000;
+
+    return cur_time_ms;
+}
+
+
 /** For block device throughput measurement. */
-const char *CACHE_STAT_FILENAME = "/sys/block/loop0/stat";
-const char *CORE_STAT_FILENAME  = "/sys/block/sdc/stat";
+static const char *CACHE_STAT_FILENAME = "/sys/block/sdc/stat";
+static const char *CORE_STAT_FILENAME  = "/sys/block/sdb/stat";
 
-struct file *cache_stat;
-struct file *core_stat;
+static struct file *cache_stat;
+static struct file *core_stat;
 
-char cache_stat_buf[1024];
-char core_stat_buf[1024];
+static char cache_stat_buf[1024];
+static char core_stat_buf[1024];
 
 
 /*========== Multi-factor algorithm logic BEGIN ==========*/
 
+/** Do not attempt tuning when miss ratio is higher than X. */
+static const int MISS_RATIO_TUNING_BOUND = 2000;    // 20%.
+
 /** Consider cache is stable if miss ratio within OLD_RATIO +- X. */
-static const int WAIT_STABLE_THRESHOLD = 15;        // 0.15%.
+static const int WAIT_STABLE_THRESHOLD = 1;         // 0.01%.
 
 /** Sleep X microseconds when detecting cache stability. */
-static const int WAIT_STABLE_SLEEP_INTERVAL_US = 100000;
+static const int WAIT_STABLE_SLEEP_INTERVAL_US = 1000000;
 
 /** Consider workload change when miss ratio > BASE_RATIO + X. */
-static const int WORKLOAD_CHANGE_THRESHOLD = 2000;   // 20%.
+static const int WORKLOAD_CHANGE_THRESHOLD = 2000;  // 20%.
 
 /** `load_admit` tuning step size. */
-static const int LOAD_ADMIT_TUNING_STEP = 100;       // 1%.
+static const int LOAD_ADMIT_TUNING_STEP = 100;      // 1%.
 
 /** Measure throughput for a `load_admit` value for X microseconds. */
-static const int MEASURE_THROUGHPUT_INTERVAL_US = 25000;
+static const int MEASURE_THROUGHPUT_INTERVAL_US = 5000;
+
+/** How many chances given to not quit on `load_admit` 100%. */
+static const int NOT_QUIT_ON_100_CHANCES = 1;
 
 /**
  * Query the stat component for read (partial + full) miss ratio info.
@@ -182,7 +209,7 @@ _get_miss_ratio(ocf_core_t core)
     }
 
     if (total <= 0)
-        return 0.0;
+        return -1;
 
     miss_ratio = (misses * 10000) / total;
 
@@ -191,26 +218,23 @@ _get_miss_ratio(ocf_core_t core)
 
 /**
  * Set `load_admit` to a value for a while and measure the throughput
- * in Bytes/s.
+ * in KiB/s.
  *
  * Throughput measured from reading /sys/block/<dev>/stat file.
  *     - 2nd counter: read sectors  in 512 bytes
  *     - 6th counter: write sectors in 512 bytes
  *     - 9th counter: device ticks  in milliseconds
  *
- * Returns throughput as an uin64_t in Bytes/s.
+ * Returns throughput as an in64_t in KiB/s.
  */
 static int64_t
 monitor_measure_throughput(int load_admit)
 {
     int64_t cache_read_sectors_old = 0, cache_write_sectors_old = 0,
-            cache_milliseconds_old = 0,
             cache_read_sectors_new = 0, cache_write_sectors_new = 0,
-            cache_milliseconds_new = 0,
-            core_read_sectors_old = 0, core_write_sectors_old = 0,
-            core_milliseconds_old = 0,
-            core_read_sectors_new = 0, core_write_sectors_new = 0, 
-            core_milliseconds_new = 0;
+            core_read_sectors_old  = 0, core_write_sectors_old  = 0,
+            core_read_sectors_new  = 0, core_write_sectors_new  = 0;
+    int64_t old_time_ms = 0, new_time_ms = 0;
     int64_t throughput = 0;
 
     char *cache_stat_tmp, *core_stat_tmp;
@@ -221,119 +245,109 @@ monitor_measure_throughput(int load_admit)
     ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
     ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
 
-    printk(KERN_ALERT "MONITOR: A, %s\n", cache_stat_buf);
+    old_time_ms = _get_cur_time_ms();
 
     cache_stat_tmp = cache_stat_buf;
-    for (count = 0; count < 10; ++count) {
+    while (*cache_stat_tmp == ' ')
+        cache_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
         cache_counter = cache_stat_tmp;
 
         while (*cache_stat_tmp != ' ' && *cache_stat_tmp != '\0')
             cache_stat_tmp++;
         if (*cache_stat_tmp == '\0')
             break;
-        *cache_stat_tmp = '\0';
-        while (*cache_stat_tmp == ' ' && *cache_stat_tmp != '\0')
+        *(cache_stat_tmp++) = '\0';
+        while (*cache_stat_tmp == ' ')
             cache_stat_tmp++;
 
         if (count == 2)
             kstrtoll(cache_counter, 10, &cache_read_sectors_old);
         else if (count == 6)
             kstrtoll(cache_counter, 10, &cache_write_sectors_old);
-        else if (count == 9)
-            kstrtoll(cache_counter, 10, &cache_milliseconds_old);
     }
 
     core_stat_tmp = core_stat_buf;
-    for (count = 0; count < 10; ++count) {
+    while (*core_stat_tmp == ' ')
+        core_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
         core_counter = core_stat_tmp;
 
         while (*core_stat_tmp != ' ' && *core_stat_tmp != '\0')
             core_stat_tmp++;
         if (*core_stat_tmp == '\0')
             break;
-        *core_stat_tmp = '\0';
-        while (*core_stat_tmp == ' ' && *core_stat_tmp != '\0')
+        *(core_stat_tmp++) = '\0';
+        while (*core_stat_tmp == ' ')
             core_stat_tmp++;
 
         if (count == 2)
             kstrtoll(core_counter, 10, &core_read_sectors_old);
         else if (count == 6)
             kstrtoll(core_counter, 10, &core_write_sectors_old);
-        else if (count == 9)
-            kstrtoll(core_counter, 10, &core_milliseconds_old);
     }
-
-    printk(KERN_ALERT "MONITOR: B\n");
 
     /** Set `load_admit` and sleep for some time. */
     monitor_set_load_admit(load_admit);
     usleep_range(MEASURE_THROUGHPUT_INTERVAL_US,
                  MEASURE_THROUGHPUT_INTERVAL_US + 1);
 
-    printk(KERN_ALERT "MONITOR: C\n");
-
     /** Get new counters and calculate the throughputs. */
     ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
     ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
 
-    printk(KERN_ALERT "MONITOR: D\n");
+    new_time_ms = _get_cur_time_ms();
 
     cache_stat_tmp = cache_stat_buf;
-    for (count = 0; count < 10; ++count) {
+    while (*cache_stat_tmp == ' ')
+        cache_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
         cache_counter = cache_stat_tmp;
 
         while (*cache_stat_tmp != ' ' && *cache_stat_tmp != '\0')
             cache_stat_tmp++;
         if (*cache_stat_tmp == '\0')
             break;
-        *cache_stat_tmp = '\0';
-        while (*cache_stat_tmp == ' ' && *cache_stat_tmp != '\0')
+        *(cache_stat_tmp++) = '\0';
+        while (*cache_stat_tmp == ' ')
             cache_stat_tmp++;
 
         if (count == 2)
             kstrtoll(cache_counter, 10, &cache_read_sectors_new);
         else if (count == 6)
             kstrtoll(cache_counter, 10, &cache_write_sectors_new);
-        else if (count == 9)
-            kstrtoll(cache_counter, 10, &cache_milliseconds_new);
     }
 
     core_stat_tmp = core_stat_buf;
-    for (count = 0; count < 10; ++count) {
+    while (*core_stat_tmp == ' ')
+        core_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
         core_counter = core_stat_tmp;
 
         while (*core_stat_tmp != ' ' && *core_stat_tmp != '\0')
             core_stat_tmp++;
         if (*core_stat_tmp == '\0')
             break;
-        *core_stat_tmp = '\0';
-        while (*core_stat_tmp == ' ' && *core_stat_tmp != '\0')
+        *(core_stat_tmp++) = '\0';
+        while (*core_stat_tmp == ' ')
             core_stat_tmp++;
 
         if (count == 2)
             kstrtoll(core_counter, 10, &core_read_sectors_new);
         else if (count == 6)
             kstrtoll(core_counter, 10, &core_write_sectors_new);
-        else if (count == 9)
-            kstrtoll(core_counter, 10, &core_milliseconds_new);
     }
 
-    printk(KERN_ALERT "MONITOR: E\n");
-
-    if (cache_milliseconds_new > cache_milliseconds_old) {
-        throughput += (int64_t) (512000
+    if (new_time_ms > old_time_ms) {
+        throughput += (int64_t) (500
                       * ((cache_read_sectors_new - cache_read_sectors_old)
                       + (cache_write_sectors_new - cache_write_sectors_old)))
-                      / (cache_milliseconds_new  - cache_milliseconds_old);
-    }
-    if (core_milliseconds_new > core_milliseconds_old) {
-        throughput += (int64_t) (512000
+                      / (new_time_ms  - old_time_ms);
+        throughput += (int64_t) (500
                       * ((core_read_sectors_new - core_read_sectors_old)
                       + (core_write_sectors_new - core_write_sectors_old)))
-                      / (core_milliseconds_new  - core_milliseconds_old);
+                      / (new_time_ms  - old_time_ms);
     }
-
-    printk(KERN_ALERT "MONITOR: F, throughput = %lld\n", throughput);
 
     return throughput;
 }
@@ -347,7 +361,8 @@ monitor_wait_stable(ocf_core_t core)
     int last_miss_ratio = -1;
     int miss_ratio = _get_miss_ratio(core);
 
-    while (miss_ratio < last_miss_ratio - WAIT_STABLE_THRESHOLD
+    while (miss_ratio > MISS_RATIO_TUNING_BOUND
+           || miss_ratio < last_miss_ratio - WAIT_STABLE_THRESHOLD
            || miss_ratio > last_miss_ratio + WAIT_STABLE_THRESHOLD) {
         if (kthread_should_stop())
             return -1;
@@ -376,7 +391,7 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
 {
     int la1, la2, la3;
     int64_t tp1, tp2, tp3;
-    bool second_chance = true;
+    int chances = NOT_QUIT_ON_100_CHANCES;
     int64_t iteration = 0;
 
     while (1) {
@@ -410,10 +425,12 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
              * If detected workload change, quit and re-optimize.
              */
             int miss_ratio = _get_miss_ratio(core);
-            if (miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD) {
+            if (miss_ratio > MISS_RATIO_TUNING_BOUND
+                || miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD
+                || miss_ratio < base_miss_ratio - WORKLOAD_CHANGE_THRESHOLD) {
                 if (MONITOR_VERBOSE_LOG) {
-                    printk(KERN_ALERT "MONITOR: (tune) miss ratio too high, "
-                                      "quit\n");
+                    printk(KERN_ALERT "MONITOR: (tune) miss ratio changed too"
+                                      " far, quit\n");
                 }
                 return;
             }
@@ -470,8 +487,8 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
          * back to classic caching.
          */
         if (monitor_query_load_admit() == 10000) {
-            if (second_chance) {    /** Give a second chance. */
-                second_chance = false;
+            if (chances > 0) {      /** Give a second chance. */
+                chances--;
                 continue;
             } else {
                 if (MONITOR_VERBOSE_LOG) {
@@ -556,6 +573,8 @@ ocf_mngt_mf_monitor_start(ocf_core_t core)
 
     env_rwlock_init(&data_admit_lock);
     env_rwlock_init(&load_admit_lock);
+
+    do_gettimeofday(&boot_tv);
 
     /** Open block device stat files. */
     cache_stat = file_open(CACHE_STAT_FILENAME, O_RDONLY, 0);
