@@ -221,7 +221,7 @@ perform_workload_tp_hack(ocf_core_t core_input, enum bench_cache_mode cache_mode
                          int intensity_input)
 {
     cache_capacity = cache_capacity_bytes / PAGE_SIZE;
-    workload_size = (int) (0.1 * cache_capacity);
+    workload_size = (int) (1.2 * cache_capacity);
     
     /** Intensity must be a multiple of 10. */
     if (intensity % 10 != 0) {
