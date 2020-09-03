@@ -162,9 +162,10 @@ cache_log_query_latency(double begin_time_ms, double end_time_ms, uint32_t *num)
             if (cache_log[i].finish_time_ms <= begin_time_ms)
                 break;
 
-            if (cache_log[i].finish_time_ms <= end_time_ms)
-                latency += (cache_log[i].finish_time_ms - cache_log[i].start_time_ms);
-            entries_num ++;
+            if (cache_log[i].finish_time_ms <= end_time_ms) {
+		latency += (cache_log[i].finish_time_ms - cache_log[i].start_time_ms);
+            	entries_num ++;
+	    }
         } while (i != cache_log_head);
     }
     env_rwlock_read_unlock(&cache_log_lock);

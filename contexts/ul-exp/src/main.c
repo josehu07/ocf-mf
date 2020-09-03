@@ -21,7 +21,7 @@ const bool CTX_PRINT_DEBUG_MSG = false;
 const bool OCF_LOGGER_INFO_MSG = false;
 
 const bool DEVICE_LOG_ENABLE  = false;
-const bool MONITOR_LOG_ENABLE = false;
+const bool MONITOR_LOG_ENABLE = true;
 
 
 /** Global parameters. */
@@ -406,27 +406,27 @@ main(int argc, char *argv[])
         prompt_usage_exit();
     printf("  Using cache mode: %s\n", argv[1]);
 
-    if (! strncmp(argv[2], "fuzzy", 5)) {
+    if (! strncmp(argv[3], "fuzzy", 5)) {
         fuzzy_testing = true;
     } else {
         fuzzy_testing = false;
-        bench_name = argv[2];
+        bench_name = argv[3];
 
-        num_args = argc - 3;
+        num_args = argc - 4;
         if (num_args > 0) {
             bench_args = malloc(sizeof(char *) * num_args);
             for (i = 0; i < num_args; ++i)
-                bench_args[i] = argv[i + 3];
+                bench_args[i] = argv[i + 4];
         }
     }
 
     tune_mode_t mode;
-    if (strncmp(argv[2], "tp", 2)) {
-        mode = tune_mode_t.THROUGHPUT;
+    if (!strncmp(argv[2], "tp", 2)) {
+        mode = THROUGHPUT;
         printf(" Using tune mode: throughput\n");
     }
-    else if (strncmp(argv[2], "la", 2)) {
-        mode = tune_mode_t.Latency;
+    else if (!strncmp(argv[2], "la", 2)) {
+        mode = LATENCY;
         printf(" Using tune mode: latency\n");
     }
     else

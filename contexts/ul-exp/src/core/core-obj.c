@@ -162,9 +162,10 @@ core_log_query_latency(double begin_time_ms, double end_time_ms, uint32_t *num)
             if (core_log[i].finish_time_ms <= begin_time_ms)
                 break;
 
-            if (core_log[i].finish_time_ms <= end_time_ms)
+            if (core_log[i].finish_time_ms <= end_time_ms) {
                 latency += (core_log[i].finish_time_ms - core_log[i].start_time_ms);
-            entries_num ++;
+            	entries_num ++;
+	    }
         } while (i != core_log_head);
     }
     env_rwlock_read_unlock(&core_log_lock);

@@ -170,6 +170,7 @@ _submit_read_io(struct ocf_io *io, int sock_fd, double start_time_ms)
         /*==========Kaiwei's Change start==========*/
         core_log_push_entry(start_time_ms, get_cur_time_ms(), io->bytes);
         /*==========Kaiwei's Change end==========*/
+	// printf("device return latency:%f, log latency:%f\n", ((float)time_used_us) / 1000, get_cur_time_ms() - start_time_ms);
 
         // DEBUG(" _R addr = 0x%08lx, len = %u, data = %.14s",
         //       io->addr, io->bytes,

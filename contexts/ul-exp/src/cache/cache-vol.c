@@ -110,6 +110,7 @@ _submit_write_io(struct ocf_io *io, int sock_fd, double start_time_ms)
         /*==========Kaiwei's Change Start==========*/
         cache_log_push_entry(start_time_ms, get_cur_time_ms(), io->bytes);
         /*==========Kaiwei's Change End==========*/
+	// printf("device return latency:%f, log latency:%f\n", ((float)time_used_us) / 1000, get_cur_time_ms() - start_time_ms);
 
         // DEBUG(" ^W addr = 0x%08lx, len = %u, data = %.14s",
         //       io->addr, io->bytes,
@@ -168,6 +169,7 @@ _submit_read_io(struct ocf_io *io, int sock_fd, double start_time_ms)
     /** If haven't, record in log. */
     if (! data->served) {
         data->served = true;
+	//printf("device return latency:%f, log latency:%f\n", ((float)time_used_us) / 1000, get_cur_time_ms() - start_time_ms);
         /*==========Kaiwei's Change Start==========*/
         cache_log_push_entry(start_time_ms, get_cur_time_ms(), io->bytes);
         /*==========Kaiwei's Change End==========*/
