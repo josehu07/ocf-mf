@@ -86,6 +86,29 @@ _get_core_throughput(double begin_time_ms, double end_time_ms)
     return core_log_query_throughput(begin_time_ms, end_time_ms);
 }
 
+/*============Kaiwei's Change==============*/
+static inline double
+_get_cache_latency(double begin_time_ms, double end_time_ms, uint32_t *num)
+{
+    return cache_log_query_latency(begin_time_ms, end_time_ms, num);
+}
+
+static inline double
+_get_core_latency(double begin_time_ms, double end_time_ms, uint32_t *num)
+{
+    return core_log_query_latency(begin_time_ms, end_time_ms, num);
+}
+
+static inline double
+_get_weighted_latency(double cache_latency, double core_latency, uint32_t cache_req_num, uint32_t core_req_num)
+{
+    if (cache_req_num + core_req_num == 0)
+        return -1;
+
+    double alpha = ((float)cache_req_num) / (cache_req_num + core_req_num);
+    return alpha * cache_latency + (1 - alpha) * core_latency;
+}
+/*============Kaiwei's Change==============*/
 
 /**
  * Define a workload - choosing a page.
@@ -263,7 +286,8 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
     base_time_ms = get_cur_time_ms();
     double cur_time_ms = base_time_ms;
     double log_interval_ms = 0.0;
-
+    double cache_latency = 0.0, core_latency = 0.0;
+    uint32_t cache_req_num, core_req_num;
     int num_reqs = 0;
 
     /**
@@ -278,18 +302,29 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
         cur_time_ms = new_time_ms;
 
         if (log_interval_ms > 500.0) {
-            printf("  *** #%d @ %.3lf ms: "
+            
+            cache_latency = _get_cache_latency(cur_time_ms - log_interval_ms, cur_time_ms, &cache_req_num);
+            core_latency = _get_core_latency(cur_time_ms - log_interval_ms, cur_time_ms, &core_req_num);
+        
+            printf(" *** #%d @ %.3lf ms: "
                    "miss_ratio = %.5lf, "
                    "load_admit = %.3lf, "
                    "cache_tp = %.3lf, "
-                   "core_tp = %.3lf\n",
+                   "core_tp = %.3lf, "
+                   "cache_latency = %.3lf, "
+                   "core_latency = %.3lf, "
+                   "weighted_latency = %.3lf\n",
                    num_reqs, cur_time_ms - base_time_ms,
                    _get_miss_ratio(core),
                    _get_load_admit(),
                    _get_cache_throughput(cur_time_ms - log_interval_ms,
                                          cur_time_ms),
                    _get_core_throughput(cur_time_ms - log_interval_ms,
-                                        cur_time_ms));
+                                        cur_time_ms),
+                   cache_latency, 
+                   core_latency, 
+                   _get_weighted_latency(cache_latency, core_latency, cache_req_num, core_req_num));
+
 
             log_interval_ms = 0.0;
         }
@@ -319,20 +354,28 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
         cur_time_ms = new_time_ms;
 
         if (log_interval_ms > 500.0) {
-            printf("  ??? #%d @ %.3lf ms: "
+            cache_latency = _get_cache_latency(cur_time_ms - log_interval_ms, cur_time_ms, &cache_req_num);
+            core_latency = _get_core_latency(cur_time_ms - log_interval_ms, cur_time_ms, &core_req_num);
+        
+            printf(" ??? #%d @ %.3lf ms: "
                    "miss_ratio = %.5lf, "
                    "load_admit = %.3lf, "
                    "cache_tp = %.3lf, "
-                   "core_tp = %.3lf\n",
+                   "core_tp = %.3lf, "
+                   "cache_latency = %.3lf, "
+                   "core_latency = %.3lf, "
+                   "weighted_latency = %.3lf\n",
                    num_reqs, cur_time_ms - base_time_ms,
                    _get_miss_ratio(core),
                    _get_load_admit(),
                    _get_cache_throughput(cur_time_ms - log_interval_ms,
                                          cur_time_ms),
                    _get_core_throughput(cur_time_ms - log_interval_ms,
-                                        cur_time_ms));
-
-            log_interval_ms = 0.0;
+                                        cur_time_ms),
+                   cache_latency, 
+                   core_latency, 
+                   _get_weighted_latency(cache_latency, core_latency, cache_req_num, core_req_num));
+           log_interval_ms = 0.0;
         }
 
         ret = submit_10_ios_in_a_row(core, proportion_reads, workload_func);
@@ -360,19 +403,27 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
         cur_time_ms = new_time_ms;
 
         if (log_interval_ms > 500.0) {
-            printf("  ... #%d @ %.3lf ms: "
+            cache_latency = _get_cache_latency(cur_time_ms - log_interval_ms, cur_time_ms, &cache_req_num);
+            core_latency = _get_core_latency(cur_time_ms - log_interval_ms, cur_time_ms, &core_req_num);
+        
+            printf(" ... #%d @ %.3lf ms: "
                    "miss_ratio = %.5lf, "
                    "load_admit = %.3lf, "
                    "cache_tp = %.3lf, "
-                   "core_tp = %.3lf\n",
+                   "core_tp = %.3lf, "
+                   "cache_latency = %.3lf, "
+                   "core_latency = %.3lf, "
+                   "weighted_latency = %.3lf\n",
                    num_reqs, cur_time_ms - base_time_ms,
                    _get_miss_ratio(core),
                    _get_load_admit(),
                    _get_cache_throughput(cur_time_ms - log_interval_ms,
                                          cur_time_ms),
                    _get_core_throughput(cur_time_ms - log_interval_ms,
-                                        cur_time_ms));
-
+                                        cur_time_ms),
+                   cache_latency, 
+                   core_latency, 
+                   _get_weighted_latency(cache_latency, core_latency, cache_req_num, core_req_num));
             log_interval_ms = 0.0;
         }
 
@@ -397,20 +448,28 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
         cur_time_ms = new_time_ms;
 
         if (log_interval_ms > 500.0) {
-            printf("  ~~~ #%d @ %.3lf ms: "
+            cache_latency = _get_cache_latency(cur_time_ms - log_interval_ms, cur_time_ms, &cache_req_num);
+            core_latency = _get_core_latency(cur_time_ms - log_interval_ms, cur_time_ms, &core_req_num);
+        
+            printf(" ... #%d @ %.3lf ms: "
                    "miss_ratio = %.5lf, "
                    "load_admit = %.3lf, "
                    "cache_tp = %.3lf, "
-                   "core_tp = %.3lf\n",
+                   "core_tp = %.3lf, "
+                   "cache_latency = %.3lf, "
+                   "core_latency = %.3lf, "
+                   "weighted_latency = %.3lf\n",
                    num_reqs, cur_time_ms - base_time_ms,
                    _get_miss_ratio(core),
                    _get_load_admit(),
                    _get_cache_throughput(cur_time_ms - log_interval_ms,
                                          cur_time_ms),
                    _get_core_throughput(cur_time_ms - log_interval_ms,
-                                        cur_time_ms));
-
-            log_interval_ms = 0.0;
+                                        cur_time_ms),
+                   cache_latency, 
+                   core_latency, 
+                   _get_weighted_latency(cache_latency, core_latency, cache_req_num, core_req_num));
+           log_interval_ms = 0.0;
         }
 
         usleep((int) (delta_ms * 1000));
