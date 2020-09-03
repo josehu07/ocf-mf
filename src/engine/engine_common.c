@@ -570,6 +570,7 @@ void ocf_engine_push_req_back(struct ocf_request *req, bool allow_sync)
 				env_ticks_to_msecs(env_get_tick_count()));
 	}
 
+
 	env_spinlock_lock_irqsave(&q->io_list_lock, lock_flags);
 
 	list_add_tail(&req->list, &q->io_list);

@@ -432,7 +432,8 @@ static void ocf_mngt_cache_add_core_insert(ocf_pipeline_t pipeline,
 
 	/* Set default cache parameters for sequential */
 	env_atomic_set(&core->conf_meta->seq_cutoff_policy,
-			ocf_seq_cutoff_policy_default);
+			ocf_seq_cutoff_policy_never);
+			//ocf_seq_cutoff_policy_default);
 	env_atomic_set(&core->conf_meta->seq_cutoff_threshold,
 			cfg->seq_cutoff_threshold);
 

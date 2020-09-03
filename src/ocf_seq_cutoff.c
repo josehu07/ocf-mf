@@ -139,7 +139,6 @@ void ocf_core_seq_cutoff_update(ocf_core_t core, struct ocf_request *req)
 
 	if (policy == ocf_seq_cutoff_policy_never)
 		return;
-
 	/* Update last accessed position and bytes counter */
 	env_rwlock_write_lock(&core->seq_cutoff.lock);
 	node = ocf_rb_tree_find(&core->seq_cutoff.tree, &item.node);

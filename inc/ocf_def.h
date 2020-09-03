@@ -193,7 +193,7 @@ typedef enum {
 	ocf_seq_cutoff_policy_max,
 		/*!< Stopper of sequential cutoff policy enumerator */
 
-	ocf_seq_cutoff_policy_default = ocf_seq_cutoff_policy_full,
+	ocf_seq_cutoff_policy_default = ocf_seq_cutoff_policy_never,
 		/*!< Default sequential cutoff policy*/
 } ocf_seq_cutoff_policy;
 
@@ -277,7 +277,7 @@ typedef enum {
 	ocf_cache_line_size_64 = 64 * KiB,
 		/*!< 64 kiB */
 
-	ocf_cache_line_size_default = ocf_cache_line_size_4,
+	ocf_cache_line_size_default = ocf_cache_line_size_8,
 		/*!< Default cache line size */
 
 	ocf_cache_line_size_min = ocf_cache_line_size_4,

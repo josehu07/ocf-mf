@@ -72,6 +72,13 @@ int counter = 0;
 struct io_event events[MAX_COUNT];
 struct timespec timeout;
 
+#define IO_QUEUE_SIZE 100000000
+uint64_t io_addrs[IO_QUEUE_SIZE];
+static env_atomic last_io_pointer;
+static env_atomic next_io_pointer;
+
+int cache_sock_fd = 0;
+
 /**
  * Routines to read from or write to the storage device.
  */
@@ -102,12 +109,12 @@ _submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
  * Submission thread runs separately. ARGS is a pointer to package id.
  */
 static void *
-_submit_thread_func(void *args)
+_completion_thread_func(void *args)
 {
     int pkg = *((int *) args);
     free((int *) args);
 
-    DEBUG("SUBMIT: submission thread for package %d launched", pkg);
+    DEBUG("SUBMIT: completion thread for package %d launched", pkg);
 
     double last_timestamp = 0.0;
     int counter = 0;
@@ -138,6 +145,45 @@ _submit_thread_func(void *args)
     return NULL;
 }
 
+static void *
+_submit_thread_func(void *args)
+{
+    int thread_id = *((int *) args);
+    free((int *) args);
+
+    DEBUG("SUBMIT: submission thread for package %d launched", thread_id);
+
+    printf("====== Started a submit thread for submitting IOs\n");
+    double last_timestamp = 0.0;
+    int counter = 0;
+    int ret = 0;
+    int next_io = 0;
+    while (1) {
+	next_io = env_atomic_inc_return(&next_io_pointer);
+	while (next_io >= env_atomic_read(&last_io_pointer)) ;
+        next_io = next_io % IO_QUEUE_SIZE;
+
+    
+	struct iocb * p = (struct iocb *)malloc(sizeof(struct iocb));
+        //io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes * 2, io->addr);
+        // this get higher bw, perhaps because the cache size is too small
+        //io_prep_pread(p, cache_sock_fd, io_buf, 4096, io_addrs[next_io] + (fastrand() % 10000) * 4096);
+        io_prep_pread(p, cache_sock_fd, io_buf, 4096, io_addrs[next_io]);
+        p->data = (void *) io_buf;
+    
+        if (io_submit(ctx_, 1, &p) != 1) {
+            io_destroy(ctx_);
+            int errnum = errno;
+	    printf("io submit error: %d %s\n", errnum, strerror( errnum ));
+	    exit(1);
+        }
+	//printf("thread %d, to submit an IO: %d, %ld\n", thread_id, next_io, io_addrs[next_io]);
+    }
+
+    // Not reached.
+    return NULL;
+}
+
 
 /*========== Cache Volume Operations Implemention BEGIN. ==========*/
 
@@ -151,6 +197,9 @@ _submit_thread_func(void *args)
 static int
 cache_vol_open(ocf_volume_t cache_vol, void *params)
 {
+    env_atomic_set(&next_io_pointer, -1);
+    env_atomic_set(&last_io_pointer, 0);
+
     const struct ocf_volume_uuid *uuid = ocf_volume_get_uuid(cache_vol);
     cache_vol_priv_t *vol_priv = ocf_volume_get_priv(cache_vol);
     int ret, i;
@@ -169,10 +218,11 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
       return 1;
     } 
     vol_priv->sock_fd = fd;
-   
+    cache_sock_fd = fd;
+
     /** Prepare for async I/Os. */
     io_buf = (char *) malloc(sizeof(char) * (4096 * 32));
-    ret = posix_memalign((void **)&io_buf, 4096, 4096 * 32); 
+    ret = posix_memalign((void **)&io_buf, 4096*32, 4096 * 32); 
     
     memset(&ctx_, 0, sizeof(ctx_));
     if (io_setup(MAX_COUNT, &ctx_) != 0) {
@@ -190,25 +240,28 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
     pkg_ptr = malloc(sizeof(int));
     *pkg_ptr = 1;
 
-    ret = pthread_attr_init(&submit_thread_attr);
+    ret = pthread_create(&submit_thread_id, NULL, _completion_thread_func, (void *)pkg_ptr);
     if (ret) {
         DEBUG("OPEN: submit thread %d creation failed", i);
         return ret;
     }
+   
 
-    ret = pthread_attr_setdetachstate(&submit_thread_attr,
-                                          PTHREAD_CREATE_DETACHED);
-    if (ret) {
-        DEBUG("OPEN: submit thread %d creation failed", i);
-        return ret;
-    }
-
-    ret = pthread_create(&submit_thread_id, &submit_thread_attr,
-                             _submit_thread_func, (void *) pkg_ptr);
-    if (ret) {
-        DEBUG("OPEN: submit thread %d creation failed", i);
-        return ret;
-    }
+    for (int i = 0; i < 2; i++) {
+        int *thread_id = malloc(sizeof(int));
+        *thread_id = i;
+        ret = pthread_create(&submit_thread_id, NULL, _submit_thread_func, (void *)thread_id);
+        if (ret) {
+            DEBUG("OPEN: submit thread %d creation failed", i);
+            return ret;
+	}
+    } 
+    //ret = pthread_create(&submit_thread_id, &submit_thread_attr,
+    //                         _submit_thread_func, (void *) pkg_ptr);
+    
+    
+    //ret = pthread_create(&submit_thread_id, &submit_thread_attr,
+    //                         _submit_thread_func, (void *) pkg_ptr);
 
     DEBUG("OPEN: name = %s, sock = %s", vol_priv->name, vol_priv->sock_name);
     return 0;
@@ -260,26 +313,13 @@ cache_vol_submit_io(struct ocf_io *io)
         return;
     }
     
-    struct volume_data *data;
-
-    data = ocf_io_get_data(io);
-    cache_vol_priv_t *vol_priv = ocf_volume_get_priv(ocf_io_get_volume(io));
-
-    /** Submit async IO to the real device */
-    for (int i = 0; i <= 1; i++) {
-    struct iocb * p = (struct iocb *)malloc(sizeof(struct iocb));
-    //io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes * 2, io->addr);
-    // this get higher bw, perhaps because the cache size is too small
-    io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes*2, io->addr + (fastrand() % 10000) * 4096);
-    p->data = (void *) io_buf;
+    if (io->bytes != 4096)
+        printf("Submitting a special IO, size of %d\n", io->bytes);
     
-    if (io_submit(ctx_, 1, &p) != 1) {
-        io_destroy(ctx_);
-        int errnum = errno;
-	printf("io submit error: %d %s\n", errnum, strerror( errnum ));
-	exit(1);
-    }
-    }
+    //printf("cache vol, to submit an IO %d, %ld \n", env_atomic_read(&last_io_pointer), io->addr);
+    io_addrs[env_atomic_read(&last_io_pointer) % IO_QUEUE_SIZE] = io->addr; 
+    env_atomic_inc(&last_io_pointer);
+
     io->end(io, 0);
     return;	
 }

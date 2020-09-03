@@ -102,6 +102,7 @@ void ocf_queue_run_single(ocf_queue_t q)
 
 void ocf_queue_run(ocf_queue_t q)
 {
+	//printf("test!\n");
 	unsigned char step = 0;
 
 	OCF_CHECK_NULL(q);
