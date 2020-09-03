@@ -13,6 +13,7 @@
 #include "core/core-obj.h"
 #include "ocf/ocf.h"
 #include "mf_monitor.h"
+#include "float.h"
 
 
 /** Indicates whether the contexts stops the monitor. */
@@ -176,6 +177,7 @@ _get_latency()
     double core_latency = core_log_query_latency(begin_time_ms, cur_time_ms, &core_number);
 
     double alpha = (float)cache_number / (float)(cache_number + core_number);
+    // printf("alpha:%f, cache_latency:%f, core_latency:%f\n", alpha, cache_latency, core_latency);
 
     return alpha * cache_latency + (1 - alpha) * core_latency;
 }
@@ -195,17 +197,17 @@ double (*target_func[MODE_NUM]) (double) = {
     [LATENCY] monitor_measure_latency,
 };
 
-bool min(double lhs, double rhs) {
+bool less(double lhs, double rhs) {
     return lhs <= rhs;
 }
 
-bool max(double lhs, double rhs) {
+bool greater(double lhs, double rhs) {
     return lhs >= rhs;
 }
 
 bool (*is_better[MODE_NUM]) (double, double) = {
-    [THROUGHPUT] max,
-    [LATENCY] min,
+    [THROUGHPUT] greater,
+    [LATENCY] less,
 };
 
 
@@ -220,6 +222,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
     double stat1, stat2, stat3;
     bool second_chance = true;
     long long int iteration = 0;
+    double limit_value = is_better[mode](1, -0.1) ? -0.1 : DBL_MAX;
 
     while (1) {
         iteration++;
@@ -234,13 +237,14 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
 
         /** Get higher ratio throughput. */
         la3 = la2 + LOAD_ADMIT_TUNING_STEP;
-        stat3 = la3 > 1.0 ? -0.1 : target_func[mode](la3);
+        stat3 = la3 > 1.0 ? limit_value : target_func[mode](la3);  
 
         /** Get lower ratio throughput. */
         la1 = la2 - LOAD_ADMIT_TUNING_STEP;
-        stat1 = la1 < 0.0 ? -0.1 : target_func[mode](la1);
+        stat1 = la1 < 0.0 ? limit_value : target_func[mode](la1);
 
         monitor_set_load_admit(la2);    /** Recover. */
+	
 
         /** Slope following loop. */
         while (1) {
@@ -255,11 +259,12 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
                 return;
             }
 
+	    printf("load admit:%f %f %f, stat:%f %f %f\n", la1, la2, la3, stat1, stat2, stat3);
             /**
              * Middle ratio yields best throughput, goto intensity check.
              */
             if (is_better[mode](stat2, stat1) && is_better[mode](stat2, stat3)) {
-                monitor_set_load_admit(la2);
+		monitor_set_load_admit(la2);
                 break;
             }
 
@@ -277,7 +282,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
                     la1 = la2; stat1 = stat2;
                     la2 = la3; stat2 = stat3;
                     la3 = la3 + LOAD_ADMIT_TUNING_STEP;
-                    stat3 = la3 > 1.0 ? -0.1 : target_func[mode](la3);
+                    stat3 = la3 > 1.0 ? limit_value : target_func[mode](la3);
                     continue;
                 }
             }
@@ -294,7 +299,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
                     la3 = la2; stat3 = stat2;
                     la2 = la1; stat2 = stat1;
                     la1 = la1 - LOAD_ADMIT_TUNING_STEP;
-                    stat1 = la1 < 0.0 ? -0.1 : target_func[mode](la1);
+                    stat1 = la1 < 0.0 ? limit_value : target_func[mode](la1);
                     continue;
                 }
             }
@@ -317,6 +322,49 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
             }
         }
     }
+}
+
+struct thread_info {
+    void *core_ptr;
+    tune_mode_t mode;
+};
+/**
+ * Monitor thread logic.
+ */
+static void *
+monitor_func(void *info)
+{
+    struct thread_info *tinfo = (struct thread_info *) info;
+    ocf_core_t core = tinfo -> core_ptr;
+    tune_mode_t mode = tinfo -> mode;
+    free(tinfo);
+    if (mode == LATENCY) printf("Starting tuning for mode latency\n");
+    else if (mode == THROUGHPUT) printf("Starting tuning for mode throughput\n");
+
+    while (1) {
+        double base_miss_ratio;
+
+        /** Start a new workload with classic caching. */
+        if (MONITOR_LOG_ENABLE)
+            fprintf(fmonitor, "  (fall) start classic caching\n");
+        monitor_set_data_admit(true);
+        monitor_set_load_admit(1.0);
+
+        /** Wait until cache is stable. */
+        base_miss_ratio = monitor_wait_stable(core);
+        if (MONITOR_LOG_ENABLE)
+            fprintf(fmonitor, "  (wait) cache is stable\n");
+
+        /** Turn off `data_admit` and start `load_admit` tuning. */
+        monitor_set_data_admit(false);
+        if (MONITOR_LOG_ENABLE) {
+            fprintf(fmonitor, "  (tune) turn off data_admit & start "
+                              "tuning\n");
+        }
+        monitor_tune_load_admit(base_miss_ratio, core, mode);
+    }
+
+    return NULL;
 }
 /*==========Kaiwei's Change End==========*/
 
@@ -431,39 +479,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
 
 
 
-/**
- * Monitor thread logic.
- */
-static void *
-monitor_func(void *core_ptr, tune_mode_t mode)
-{
-    ocf_core_t core = core_ptr;
 
-    while (1) {
-        double base_miss_ratio;
-
-        /** Start a new workload with classic caching. */
-        if (MONITOR_LOG_ENABLE)
-            fprintf(fmonitor, "  (fall) start classic caching\n");
-        monitor_set_data_admit(true);
-        monitor_set_load_admit(1.0);
-
-        /** Wait until cache is stable. */
-        base_miss_ratio = monitor_wait_stable(core);
-        if (MONITOR_LOG_ENABLE)
-            fprintf(fmonitor, "  (wait) cache is stable\n");
-
-        /** Turn off `data_admit` and start `load_admit` tuning. */
-        monitor_set_data_admit(false);
-        if (MONITOR_LOG_ENABLE) {
-            fprintf(fmonitor, "  (tune) turn off data_admit & start "
-                              "tuning\n");
-        }
-        monitor_tune_load_admit(base_miss_ratio, core, mode);
-    }
-
-    return NULL;
-}
 
 /*========== Multi-factor algorithm logic END ==========*/
 
@@ -495,10 +511,14 @@ ocf_mngt_mf_monitor_init(ocf_core_t core, tune_mode_t mode)
                                       PTHREAD_CREATE_DETACHED);
     if (ret)
         return ret;
-
+	
+    struct thread_info *tinfo = (struct thread_info *)malloc(sizeof(struct thread_info));
+    tinfo -> core_ptr = core;
+    tinfo -> mode = mode;
     /** Create the monitor thread. */
     ret = pthread_create(&monitor_thread_id, &monitor_thread_attr,
-                         monitor_func, (void *) core, mode);
+                         monitor_func, (void *) tinfo);
+    printf("Successfully start the monitor thread");
     if (ret)
         return ret;
 

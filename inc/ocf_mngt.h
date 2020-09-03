@@ -1106,13 +1106,14 @@ void ocf_mngt_core_pool_remove(ocf_ctx_t ctx, ocf_volume_t volume);
 
 
 /*========== [Orthus FLAG BEGIN] ==========*/
-
-/*===========Kaiwei's Change Start=============*/
+/*===============Kaiwei's Change Start==================*/
 /**
  * Setup multi-factor switches and sart the monitor thread.
  */
+#include "common.h"
 int ocf_mngt_mf_monitor_init(ocf_core_t core, tune_mode_t mode);
-/*===========Kaiwei's Change End=============*/
+/*===============Kaiwei's Change End==================*/
+
 /**
  * For the context to gracefully stop the monitor thread.
  */
