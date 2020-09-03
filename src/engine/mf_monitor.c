@@ -222,7 +222,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
     double stat1, stat2, stat3;
     bool second_chance = true;
     long long int iteration = 0;
-    double limit_value = is_better[mode](1, -0.1) ? -0.1 : DBL_MAX;
+    double limit_value = is_better[mode](1.0, -0.1) ? -0.1 : DBL_MAX;
 
     while (1) {
         iteration++;
@@ -259,7 +259,7 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
                 return;
             }
 
-	    printf("load admit:%f %f %f, stat:%f %f %f\n", la1, la2, la3, stat1, stat2, stat3);
+	    // printf("load admit:%f %f %f, stat:%f %f %f\n", la1, la2, la3, stat1, stat2, stat3);
             /**
              * Middle ratio yields best throughput, goto intensity check.
              */
