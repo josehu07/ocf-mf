@@ -143,6 +143,7 @@ core_log_query_throughput(double begin_time_ms, double end_time_ms)
     return (kilobytes * 1000.0) / (end_time_ms - begin_time_ms);
 }
 
+/*========================Kaiwei's Change START=======================*/
 /**
  * Query the log for latency (ms) of given time interval.
  */
@@ -162,10 +163,10 @@ core_log_query_latency(double begin_time_ms, double end_time_ms, uint32_t *num)
             if (core_log[i].finish_time_ms <= begin_time_ms)
                 break;
 
-            if (core_log[i].finish_time_ms <= end_time_ms && core_log[i].start_time_ms >= begin_time_ms) {
+            if (core_log[i].finish_time_ms <= end_time_ms) {
                 latency += (core_log[i].finish_time_ms - core_log[i].start_time_ms);
             	entries_num ++;
-	    }
+	        }
         } while (i != core_log_head);
     }
     env_rwlock_read_unlock(&core_log_lock);
@@ -173,9 +174,9 @@ core_log_query_latency(double begin_time_ms, double end_time_ms, uint32_t *num)
 
     return entries_num == 0 ? 0 : (latency / (float)entries_num);
 }
+/*========================Kaiwei's Change END=======================*/
 
 /*========== Device log implementation END ==========*/
-
 
 /**
  * Setup the core object and attach core device as a CORE_VOL_TYPE
