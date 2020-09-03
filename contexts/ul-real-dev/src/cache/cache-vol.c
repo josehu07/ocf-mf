@@ -41,8 +41,6 @@ static struct req_entry submit_queue;
 static env_mutex submit_queue_lock;
 static env_completion submit_queue_sem;
 
-static int num_threads = 0;
-
 /**
  * Request header (1st message) format.
  * Message size MUST exactly match in bytes!
@@ -53,11 +51,6 @@ struct __attribute__((__packed__)) req_header {
     uint32_t size          : 32;
     uint64_t start_time_us : 64;
 };
-
-static const size_t REQ_HEADER_LENGTH = 24;
-
-static const int FLASHSIM_DIR_READ  = 0;
-static const int FLASHSIM_DIR_WRITE = 1;
 
 
 /** This lock protects the FlashSim socket file. */
@@ -71,38 +64,13 @@ io_context_t ctx_;
 struct io_event events[MAX_COUNT];
 struct timespec timeout;
 
+// hacking io queue to avoid the lock overhead
 #define IO_QUEUE_SIZE 100000000
 uint64_t io_addrs[IO_QUEUE_SIZE];
 static env_atomic last_io_pointer;
 static env_atomic next_io_pointer;
 
 int cache_sock_fd = 0;
-
-/**
- * Routines to read from or write to the storage device.
- */
-/** Write to real device. */
-static int
-_submit_write_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
-                 double start_time_ms)
-{
-    //printf("a cache write: %ld, size: %d\n", io->addr, io->bytes);
-    int sz = pwrite(sock_fd, io_buf, io->bytes, io->addr);
-    assert(sz == io->bytes);
-    return 0;
-}
-
-/** Read from real device. */
-static int
-_submit_read_io(struct ocf_io *io, simfs_data_t *data, int sock_fd,
-                double start_time_ms)
-{
-    int sz = pread(sock_fd, io_buf, io->bytes, io->addr);
-    assert(sz == io->bytes);
-    //memcpy(data->ptr + data->offset, io_buf, io->bytes);
-
-    return 0;
-}
 
 /**
  * Submission thread runs separately. ARGS is a pointer to package id.
@@ -153,9 +121,7 @@ _submit_thread_func(void *args)
     DEBUG("SUBMIT: submission thread for package %d launched", thread_id);
 
     printf("====== Started a submit thread for submitting IOs\n");
-    double last_timestamp = 0.0;
     int counter = 0;
-    int ret = 0;
     int next_io = 0;
     while (1) {
 	next_io = env_atomic_inc_return(&next_io_pointer);
@@ -236,7 +202,6 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
 
     /** Start a I/O completion check threads. */
     pthread_t submit_thread_id;
-    pthread_attr_t submit_thread_attr;
     int *pkg_ptr;
     
     pkg_ptr = malloc(sizeof(int));
