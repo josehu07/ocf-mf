@@ -24,5 +24,11 @@ double core_log_query_throughput(double begin_time_ms, double end_time_ms);
 int core_obj_setup(ocf_cache_t cache, ocf_core_t *core);
 int core_obj_stop(ocf_core_t core);
 
+env_atomic core_read_counter;
+env_atomic core_write_counter;
+
+/** query as well as reset the counters of cache */
+int core_query_read_throughput();
+int core_query_write_throughput(); 
 
 #endif

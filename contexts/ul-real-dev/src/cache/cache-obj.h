@@ -38,5 +38,11 @@ int cache_obj_setup(ocf_ctx_t ctx, ocf_cache_t *cache,
                     enum bench_cache_mode cache_mode);
 int cache_obj_stop(ocf_cache_t cache);
 
+env_atomic cache_read_counter;
+env_atomic cache_write_counter;
+
+/** query as well as reset the counters of cache */
+int cache_query_read_throughput();
+int cache_query_write_throughput(); 
 
 #endif

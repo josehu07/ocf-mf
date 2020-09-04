@@ -96,7 +96,19 @@ _completion_thread_func(void *args)
 
 	if (ret == 0)	
 	    continue;
-        
+       
+	struct iocb * p;
+        for (int i = 0; i < ret; i++) {
+	    p = events[i].obj;
+	    if (p->aio_lio_opcode == IO_CMD_PREAD) {
+                //printf("Get a read completed %ld \n", events[i].res);
+                env_atomic_add(events[i].res, &cache_read_counter);
+	    } else if (p->aio_lio_opcode == IO_CMD_PWRITE) {
+                //printf("Get a write completed %ld \n", events[i].res);
+                env_atomic_add(events[i].res, &cache_write_counter);
+	    }
+	}	
+	
 	counter += ret;
         
 	if (counter % 1000000 == 0) {

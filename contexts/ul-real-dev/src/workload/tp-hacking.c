@@ -183,13 +183,34 @@ ocf_core_t core;
 enum bench_cache_mode cache_mode;
 int intensity;
 int num_threads = 1;
-	
+
+
+
+void
+wait(int loop_count)
+{   // this function needs to be finetuned for the specific microprocessor
+    int i, j, k;
+    int wait_loop0 = 10;
+    int wait_loop1 = 500;
+    for(i = 0; i < loop_count; i++)
+    {
+        for(j = 0; j < wait_loop0; j++)
+        {
+            for(k = 0; k < wait_loop1; k++)
+            {   // waste function, volatile makes sure it is not being optimized out by compiler
+                int volatile t = 120 * j * i + k;
+                t = t + 5;
+            }
+        }
+    }
+}
+
+
 void *
 tp_hack_thread(void *args)
 {
     printf("Started a tp hacking workload thread!\n");
     int thread_id = *((int *)args); 
-    usleep(1000000); 
     simfs_data_t *data = simfs_data_alloc(1);
     int ret;
 
@@ -202,7 +223,13 @@ tp_hack_thread(void *args)
 	    printf("Submit 10 ios with error\n");
 	}
 
-	//for (int i = 1; i < 10000; i++) ;
+	
+	wait(0); //1.1 Million 
+	//wait(1);   //0.8 Million
+	//wait(3);  // 570 K    mfwa perhaps need a bit smaller wait time
+	//wait(10);  // 270 K
+
+	
 	local_counter += 10;
         if (local_counter % 1000000 == 0) {
 	    local_cur_timestamp = get_cur_time_ms();
@@ -211,6 +238,7 @@ tp_hack_thread(void *args)
 	    local_counter = 0;
 	    local_last_timestamp = get_cur_time_ms();
         }
+
     } while (1);
     
     simfs_data_free(data);
@@ -222,7 +250,8 @@ perform_workload_tp_hack(ocf_core_t core_input, enum bench_cache_mode cache_mode
                          int intensity_input)
 {
     cache_capacity = cache_capacity_bytes / PAGE_SIZE;
-    workload_size = (int) (1.1 * cache_capacity);
+    //workload_size = (int) (0.5 * cache_capacity);
+    workload_size = (int) (1.25 * cache_capacity);
     
     /** Intensity must be a multiple of 10. */
     if (intensity % 10 != 0) {

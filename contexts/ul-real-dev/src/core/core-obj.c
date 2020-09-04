@@ -16,6 +16,20 @@
 #include "core-obj.h"
 
 
+int 
+core_query_read_throughput() {
+   int read_bytes = env_atomic_read(&core_read_counter);
+   env_atomic_set(&core_read_counter, 0);
+   return read_bytes;
+}
+
+int 
+core_query_write_throughput() {
+   int write_bytes = env_atomic_read(&core_write_counter);
+   env_atomic_set(&core_write_counter, 0);
+   return write_bytes;
+}
+
 /**
  * Callback states shared between OCF routines and callbacks during
  * add core. This callback function will be assigned to any OCF

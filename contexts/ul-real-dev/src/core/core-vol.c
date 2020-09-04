@@ -97,6 +97,16 @@ _completion_thread_func(void *args)
 
 	if (ret == 0)	
 	    continue;
+	
+	struct iocb * p;
+        for (int i = 0; i < ret; i++) {
+	    p = core_events[i].obj;
+	    if (p->aio_lio_opcode == IO_CMD_PREAD) {
+                env_atomic_add(core_events[i].res, &core_read_counter);
+	    } else if (p->aio_lio_opcode == IO_CMD_PWRITE) {
+                env_atomic_add(core_events[i].res, &core_write_counter);
+	    }
+	}	
         
 	counter += ret;
         

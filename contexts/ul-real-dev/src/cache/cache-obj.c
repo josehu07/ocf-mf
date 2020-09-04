@@ -17,6 +17,21 @@
 #include "cache-obj.h"
 
 
+
+int 
+cache_query_read_throughput() {
+   int read_bytes = env_atomic_read(&cache_read_counter);
+   env_atomic_set(&cache_read_counter, 0);
+   return read_bytes;
+}
+
+int 
+cache_query_write_throughput() {
+   int write_bytes = env_atomic_read(&cache_write_counter);
+   env_atomic_set(&cache_write_counter, 0);
+   return write_bytes;
+}
+
 /**
  * Callback states shared between OCF routines and callbacks during
  * cache setup. This callback function will be assigned to any OCF
