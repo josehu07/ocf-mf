@@ -167,6 +167,7 @@ submit_10_ios_in_a_row(ocf_core_t core, simfs_data_t *simfs_data,
 
     for (i = 0; i < 10; ++i) {
 	int dir = OCF_READ;
+	//int dir = OCF_WRITE;
         uint32_t size = PAGE_SIZE;
 	uint64_t addr = which_page_workload_fast() * PAGE_SIZE;
 
@@ -221,7 +222,7 @@ perform_workload_tp_hack(ocf_core_t core_input, enum bench_cache_mode cache_mode
                          int intensity_input)
 {
     cache_capacity = cache_capacity_bytes / PAGE_SIZE;
-    workload_size = (int) (1.2 * cache_capacity);
+    workload_size = (int) (1.1 * cache_capacity);
     
     /** Intensity must be a multiple of 10. */
     if (intensity % 10 != 0) {

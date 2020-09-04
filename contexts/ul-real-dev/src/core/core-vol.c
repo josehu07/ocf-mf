@@ -130,7 +130,18 @@ _submit_thread_func(void *args)
 	struct iocb * p = (struct iocb *)malloc(sizeof(struct iocb));
         //io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes * 2, io->addr);
         //io_prep_pread(p, core_sock_fd, io_buf, 4096, (fastrand() % 1000000) * 4096);
-	io_prep_pread(p, core_sock_fd, core_io_buf, 4096, core_io_addrs[next_io]);
+	
+	uint64_t addr_formatted = core_io_addrs[next_io];
+	if (addr_formatted % 2 == 0) {
+	    // read
+	    addr_formatted = addr_formatted / 2;
+	    io_prep_pread(p, core_sock_fd, core_io_buf, 4096, addr_formatted);
+	} else {
+	    // write
+	    addr_formatted = addr_formatted / 2;
+	    io_prep_pwrite(p, core_sock_fd, core_io_buf, 4096, addr_formatted);
+	}
+	//io_prep_pread(p, core_sock_fd, core_io_buf, 4096, core_io_addrs[next_io]);
 	p->data = (void *) core_io_buf;
     
         if (io_submit(core_ctx_, 1, &p) != 1) {
@@ -272,8 +283,22 @@ core_vol_submit_io(struct ocf_io *io)
     if (io->bytes != 4096)
         printf("Cache: Submitting a special IO, size of %d\n", io->bytes);
     
+    uint64_t addr_formatted = io->addr; 
+    switch (io->dir) {
+        case OCF_WRITE:
+            //printf("this is a write %d bytes\n", io->bytes);
+	    addr_formatted = io->addr * 2 + 1; 
+            break;
+        case OCF_READ:
+            //printf("this is a read\n");
+	    addr_formatted = io->addr * 2 + 0; 
+            break;
+    }
+
+
     //printf("cache vol, to submit an IO %d, %ld \n", env_atomic_read(&last_io_pointer), io->addr);
-    core_io_addrs[env_atomic_read(&core_last_io_pointer) % IO_QUEUE_SIZE] = io->addr; 
+    core_io_addrs[env_atomic_read(&core_last_io_pointer) % IO_QUEUE_SIZE] = addr_formatted; 
+    //core_io_addrs[env_atomic_read(&core_last_io_pointer) % IO_QUEUE_SIZE] = io->addr; 
     env_atomic_inc(&core_last_io_pointer);
     
     io->end(io, 0);
