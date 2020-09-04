@@ -95,7 +95,7 @@ static const double WORKLOAD_CHANGE_THRESHOLD = 0.2;
 static const double LOAD_ADMIT_TUNING_STEP = 0.01;
 
 /** Measure throughput for a `load_admit` value for X microseconds. */
-static const int MEASURE_THROUGHPUT_INTERVAL_US = 75000;
+static const int MEASURE_THROUGHPUT_INTERVAL_US = 50000;
 
 /**
  * Query the stat component for read (partial + full) miss ratio info.
@@ -180,7 +180,7 @@ _get_latency()
 	    return DBL_MAX;
 
     double alpha = (float)cache_number / (float)(cache_number + core_number);
-    printf("alpha:%f, cache_latency:%f, core_latency:%f\n", alpha, cache_latency, core_latency);
+    // printf("alpha:%f, cache_latency:%f, core_latency:%f\n", alpha, cache_latency, core_latency);
 
     return alpha * cache_latency + (1 - alpha) * core_latency;
 }
