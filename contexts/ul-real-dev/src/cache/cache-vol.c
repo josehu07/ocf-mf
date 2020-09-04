@@ -73,6 +73,7 @@ static env_atomic last_io_pointer;
 static env_atomic next_io_pointer;
 
 int cache_sock_fd = 0;
+uint8_t * cache_map;
 
 /**
  * Submission thread runs separately. ARGS is a pointer to package id.
@@ -188,35 +189,25 @@ _nvm_submit_thread_func(void *args)
 	next_io = env_atomic_inc_return(&next_io_pointer);
 	while (next_io >= env_atomic_read(&last_io_pointer)) ;
         next_io = next_io % IO_QUEUE_SIZE;
-        ssize_t ret = pread(cache_sock_fd, io_buf, 4096, (cache_fastrand() % 1000000) * 4096); 
-	if (ret != 4096) {
-	    printf("read failed\n");
-	}
-
-
-	//io_prep_pread(p, cache_sock_fd, io_buf, 4096, (fastrand() % 1000000) * 4096);
-
-         
-	/*struct iocb * p = (struct iocb *)malloc(sizeof(struct iocb));
-        //io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes * 2, io->addr);
-        //io_prep_pread(p, cache_sock_fd, io_buf, 4096, (fastrand() % 1000000) * 4096);
-	
-	uint64_t addr_formatted = io_addrs[next_io];
+        
+	uint64_t *start = (uint64_t *) (cache_map + (cache_fastrand() % 1000000) * 4096);
+        //printf("read from %ld \n", start);	
+        
+	uint64_t addr_formatted = io_addrs[next_io]; 
+	//uint64_t local_counter = 1;
+	volatile uint64_t local_counter = 0; 
 	if (addr_formatted % 2 == 0) {
 	    // read
-	    addr_formatted = addr_formatted / 2;
-	    io_prep_pread(p, cache_sock_fd, io_buf, 4096, (cache_fastrand() % 1000000) * 4096);
-	    //io_prep_pread(p, cache_sock_fd, io_buf, 4096, addr_formatted);
+	    //addr_formatted = addr_formatted / 2;
+	    //memcpy((void *)io_buf, (void *)start, 4096 * 2);
+	    for (uint64_t j = 0; j< 4096 / 8; j += 8) {
+		local_counter += start[j];
+	    }
 	} else {
 	    // write
-	    addr_formatted = addr_formatted / 2;
-	    io_prep_pwrite(p, cache_sock_fd, io_buf, 4096, addr_formatted);
-	}
-
-	//io_prep_pread(p, cache_sock_fd, io_buf, 4096, io_addrs[next_io]);
-	p->data = (void *) io_buf;
-    
-	*/
+	    //addr_formatted = addr_formatted / 2;
+            //_mm512_stream_si512 ((__m512i*)(start + j), write_data_vec);
+        }
     }
 
     // Not reached.
@@ -245,26 +236,27 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
 
     vol_priv->name = ocf_uuid_to_str(uuid);
 
-    /** Open real device(file). */
-    vol_priv->sock_name = cache_sock_name;
-    printf("cache sock name: %s, size: %ld \n", cache_sock_name, cache_capacity_bytes);
-    //remove(cache_sock_name);
-    
-    int fd = open(cache_sock_name, O_RDWR | O_DIRECT | O_CREAT, 0);      // O_DIRECT
-    //int fd = open(("/mnt/pmem/file_" + to_string(thread_id)).c_str(), O_RDWR | O_CREAT, 0);
-    //int td = ftruncate(fd, cache_capacity_bytes);
-    int td = 0;
-    if (fd < 0 || td < 0) {
-      printf("Cache: raw Device Open failed\n");
-      return 1;
-    } 
-    vol_priv->sock_fd = fd;
-    cache_sock_fd = fd;
-    
     io_buf = (char *) malloc(sizeof(char) * (4096 * 32));
     ret = posix_memalign((void **)&io_buf, 4096*32, 4096 * 32); 
-
+    
     if (!NVDIMM) {
+        /** Open real device(file). */
+        vol_priv->sock_name = cache_sock_name;
+        printf("cache sock name: %s, size: %ld \n", cache_sock_name, cache_capacity_bytes);
+        //remove(cache_sock_name);
+    
+        int fd = open(cache_sock_name, O_RDWR | O_DIRECT | O_CREAT, 0);      // O_DIRECT
+        //int fd = open(("/mnt/pmem/file_" + to_string(thread_id)).c_str(), O_RDWR | O_CREAT, 0);
+        //int td = ftruncate(fd, cache_capacity_bytes);
+        int td = 0;
+        if (fd < 0 || td < 0) {
+            printf("Cache: raw Device Open failed\n");
+            return 1;
+        } 
+        vol_priv->sock_fd = fd;
+        cache_sock_fd = fd;
+    
+
         /** Prepare for async I/Os. */
         memset(&ctx_, 0, sizeof(ctx_));
         if (io_setup(MAX_COUNT, &ctx_) != 0) {
@@ -288,7 +280,7 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
         }
     
         /** Start two async I/O submitting threads. */
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 4; i++) {
             int *thread_id = malloc(sizeof(int));
             *thread_id = i;
             ret = pthread_create(&submit_thread_id, NULL, _submit_thread_func, (void *)thread_id);
@@ -309,9 +301,21 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
 	    }
         } 
     } else {
-	/** Start two async I/O submitting threads. */
+        int fd = open(cache_sock_name, O_RDWR | O_CREAT, 0);
+        
+	if (fd < 0) {
+            printf("Cache: raw Device Open failed\n");
+            return 1;
+        } 
+        vol_priv->sock_fd = fd;
+        cache_sock_fd = fd;
+
+        cache_map = (uint8_t *) mmap(NULL, ((size_t)10)*1024*1024*1024, PROT_WRITE, MAP_SHARED, fd, 0);	
+        //memset(cache_map, 'a', ((size_t)10)*1024*1024*1024);
+
+	/** Start NVDIMM access threads. */
         pthread_t submit_thread_id;
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < 2; i++) {
             int *thread_id = malloc(sizeof(int));
             *thread_id = i;
             ret = pthread_create(&submit_thread_id, NULL, _nvm_submit_thread_func, (void *)thread_id);
