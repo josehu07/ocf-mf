@@ -56,6 +56,8 @@ struct __attribute__((__packed__)) req_header {
 /** This lock protects the FlashSim socket file. */
 static env_mutex cache_device_lock;
 
+#define NVDIMM true
+
 char * io_buf ;
 io_context_t ctx_;
 
@@ -124,6 +126,12 @@ _completion_thread_func(void *args)
     return NULL;
 }
 
+unsigned int cache_g_seed = 2333;
+inline int cache_fastrand() {
+  cache_g_seed = (214013*cache_g_seed+2531011);
+  return (cache_g_seed>>16)&0x7FFF;
+}
+
 static void *
 _submit_thread_func(void *args)
 {
@@ -146,7 +154,8 @@ _submit_thread_func(void *args)
 	if (addr_formatted % 2 == 0) {
 	    // read
 	    addr_formatted = addr_formatted / 2;
-	    io_prep_pread(p, cache_sock_fd, io_buf, 4096, addr_formatted);
+	    io_prep_pread(p, cache_sock_fd, io_buf, 4096, (cache_fastrand() % 1000000) * 4096);
+	    //io_prep_pread(p, cache_sock_fd, io_buf, 4096, addr_formatted);
 	} else {
 	    // write
 	    addr_formatted = addr_formatted / 2;
@@ -162,6 +171,52 @@ _submit_thread_func(void *args)
 	    printf("Cache: io submit error: %d %s\n", errnum, strerror( errnum ));
 	    exit(1);
         }
+    }
+
+    // Not reached.
+    return NULL;
+}
+
+static void *
+_nvm_submit_thread_func(void *args)
+{
+    int thread_id = *((int *) args);
+    free((int *) args);
+
+    printf("====== Cache: Started a NVM submit thread %d for submitting IOs\n", thread_id);
+    int next_io = 0;
+    while (1) {
+	next_io = env_atomic_inc_return(&next_io_pointer);
+	while (next_io >= env_atomic_read(&last_io_pointer)) ;
+        next_io = next_io % IO_QUEUE_SIZE;
+
+    
+	/*struct iocb * p = (struct iocb *)malloc(sizeof(struct iocb));
+        //io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes * 2, io->addr);
+        //io_prep_pread(p, cache_sock_fd, io_buf, 4096, (fastrand() % 1000000) * 4096);
+	
+	uint64_t addr_formatted = io_addrs[next_io];
+	if (addr_formatted % 2 == 0) {
+	    // read
+	    addr_formatted = addr_formatted / 2;
+	    io_prep_pread(p, cache_sock_fd, io_buf, 4096, (cache_fastrand() % 1000000) * 4096);
+	    //io_prep_pread(p, cache_sock_fd, io_buf, 4096, addr_formatted);
+	} else {
+	    // write
+	    addr_formatted = addr_formatted / 2;
+	    io_prep_pwrite(p, cache_sock_fd, io_buf, 4096, addr_formatted);
+	}
+
+	//io_prep_pread(p, cache_sock_fd, io_buf, 4096, io_addrs[next_io]);
+	p->data = (void *) io_buf;
+    
+        if (io_submit(ctx_, 1, &p) != 1) {
+            io_destroy(ctx_);
+            int errnum = errno;
+	    printf("Cache: io submit error: %d %s\n", errnum, strerror( errnum ));
+	    exit(1);
+        }
+	*/
     }
 
     // Not reached.
@@ -194,7 +249,9 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
     vol_priv->sock_name = cache_sock_name;
     printf("cache sock name: %s, size: %ld \n", cache_sock_name, cache_capacity_bytes);
     //remove(cache_sock_name);
+    
     int fd = open(cache_sock_name, O_RDWR | O_DIRECT | O_CREAT, 0);      // O_DIRECT
+    //int fd = open(("/mnt/pmem/file_" + to_string(thread_id)).c_str(), O_RDWR | O_CREAT, 0);
     //int td = ftruncate(fd, cache_capacity_bytes);
     int td = 0;
     if (fd < 0 || td < 0) {
@@ -203,43 +260,56 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
     } 
     vol_priv->sock_fd = fd;
     cache_sock_fd = fd;
-
-    /** Prepare for async I/Os. */
+    
     io_buf = (char *) malloc(sizeof(char) * (4096 * 32));
     ret = posix_memalign((void **)&io_buf, 4096*32, 4096 * 32); 
-    
-    memset(&ctx_, 0, sizeof(ctx_));
-    if (io_setup(MAX_COUNT, &ctx_) != 0) {
-        printf("Cache: io_context_t set failed");
-        exit(1);
-    }
-    timeout.tv_sec = 0;
-    timeout.tv_nsec = 100;
 
-    /** Start a I/O completion check threads. */
-    pthread_t submit_thread_id;
-    int *pkg_ptr;
+    if (!NVDIMM) {
+        /** Prepare for async I/Os. */
+        memset(&ctx_, 0, sizeof(ctx_));
+        if (io_setup(MAX_COUNT, &ctx_) != 0) {
+            printf("Cache: io_context_t set failed");
+            exit(1);
+        }
+        timeout.tv_sec = 0;
+        timeout.tv_nsec = 100;
+        
+	/** Start a I/O completion check threads. */
+        pthread_t submit_thread_id;
+        int *pkg_ptr;
     
-    pkg_ptr = malloc(sizeof(int));
-    *pkg_ptr = 1;
+        pkg_ptr = malloc(sizeof(int));
+        *pkg_ptr = 1;
 
-    ret = pthread_create(&submit_thread_id, NULL, _completion_thread_func, (void *)pkg_ptr);
-    if (ret) {
-        DEBUG("OPEN: submit thread %d creation failed", i);
-        return ret;
-    }
-
-    
-    /** Start two async I/O submitting threads. */
-    for (int i = 0; i < 2; i++) {
-        int *thread_id = malloc(sizeof(int));
-        *thread_id = i;
-        ret = pthread_create(&submit_thread_id, NULL, _submit_thread_func, (void *)thread_id);
+        ret = pthread_create(&submit_thread_id, NULL, _completion_thread_func, (void *)pkg_ptr);
         if (ret) {
             DEBUG("OPEN: submit thread %d creation failed", i);
             return ret;
-	}
-    } 
+        }
+    
+        /** Start two async I/O submitting threads. */
+        for (int i = 0; i < 2; i++) {
+            int *thread_id = malloc(sizeof(int));
+            *thread_id = i;
+            ret = pthread_create(&submit_thread_id, NULL, _submit_thread_func, (void *)thread_id);
+            if (ret) {
+                DEBUG("OPEN: submit thread %d creation failed", i);
+                return ret;
+	    }
+        } 
+    } else {
+	/** Start two async I/O submitting threads. */
+        pthread_t submit_thread_id;
+        for (int i = 0; i < 8; i++) {
+            int *thread_id = malloc(sizeof(int));
+            *thread_id = i;
+            ret = pthread_create(&submit_thread_id, NULL, _nvm_submit_thread_func, (void *)thread_id);
+            if (ret) {
+                DEBUG("OPEN: nvm submit thread %d creation failed", i);
+                return ret;
+	    }
+        } 
+    }
 
     DEBUG("OPEN: name = %s, sock = %s", vol_priv->name, vol_priv->sock_name);
     return 0;
@@ -274,11 +344,6 @@ extern double base_time_ms;
  * Submit an IO request to volume.
  * Here we simply push to the tail of queue.
  */
-unsigned int g_seed = 2333;
-inline int fastrand() {
-  g_seed = (214013*g_seed+2531011);
-  return (g_seed>>16)&0x7FFF;
-}
 	
 static void
 cache_vol_submit_io(struct ocf_io *io)
