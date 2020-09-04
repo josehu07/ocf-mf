@@ -368,8 +368,8 @@ main(int argc, char *argv[])
     /** FlashSim sockets. */
     //cache_sock_name = "cache-sock";
     //core_sock_name  = "core-sock";
-    cache_sock_name = "/mnt/optane/ocf_cache";
-    //cache_sock_name = "/mnt/pmem/ocf_cache";
+    //cache_sock_name = "/mnt/optane/ocf_cache";
+    cache_sock_name = "/mnt/pmem/ocf_cache";
     core_sock_name  = "/mnt/970/ocf_core";
 
     /** Get cache mode and intensity for this round of experiment. */

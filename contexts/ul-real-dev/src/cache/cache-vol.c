@@ -138,6 +138,7 @@ _submit_thread_func(void *args)
     int thread_id = *((int *) args);
     free((int *) args);
 
+    
     printf("====== Cache: Started a submit thread %d for submitting IOs\n", thread_id);
     int next_io = 0;
     while (1) {
@@ -147,15 +148,13 @@ _submit_thread_func(void *args)
 
     
 	struct iocb * p = (struct iocb *)malloc(sizeof(struct iocb));
-        //io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes * 2, io->addr);
-        //io_prep_pread(p, cache_sock_fd, io_buf, 4096, (fastrand() % 1000000) * 4096);
 	
 	uint64_t addr_formatted = io_addrs[next_io];
 	if (addr_formatted % 2 == 0) {
 	    // read
 	    addr_formatted = addr_formatted / 2;
-	    io_prep_pread(p, cache_sock_fd, io_buf, 4096, (cache_fastrand() % 1000000) * 4096);
-	    //io_prep_pread(p, cache_sock_fd, io_buf, 4096, addr_formatted);
+	    //io_prep_pread(p, cache_sock_fd, io_buf, 4096, (cache_fastrand() % 1000000) * 4096);
+	    io_prep_pread(p, cache_sock_fd, io_buf, 4096, addr_formatted);
 	} else {
 	    // write
 	    addr_formatted = addr_formatted / 2;
@@ -189,8 +188,15 @@ _nvm_submit_thread_func(void *args)
 	next_io = env_atomic_inc_return(&next_io_pointer);
 	while (next_io >= env_atomic_read(&last_io_pointer)) ;
         next_io = next_io % IO_QUEUE_SIZE;
+        ssize_t ret = pread(cache_sock_fd, io_buf, 4096, (cache_fastrand() % 1000000) * 4096); 
+	if (ret != 4096) {
+	    printf("read failed\n");
+	}
 
-    
+
+	//io_prep_pread(p, cache_sock_fd, io_buf, 4096, (fastrand() % 1000000) * 4096);
+
+         
 	/*struct iocb * p = (struct iocb *)malloc(sizeof(struct iocb));
         //io_prep_pread(p, vol_priv->sock_fd, io_buf, io->bytes * 2, io->addr);
         //io_prep_pread(p, cache_sock_fd, io_buf, 4096, (fastrand() % 1000000) * 4096);
@@ -210,12 +216,6 @@ _nvm_submit_thread_func(void *args)
 	//io_prep_pread(p, cache_sock_fd, io_buf, 4096, io_addrs[next_io]);
 	p->data = (void *) io_buf;
     
-        if (io_submit(ctx_, 1, &p) != 1) {
-            io_destroy(ctx_);
-            int errnum = errno;
-	    printf("Cache: io submit error: %d %s\n", errnum, strerror( errnum ));
-	    exit(1);
-        }
 	*/
     }
 
@@ -296,17 +296,39 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
                 DEBUG("OPEN: submit thread %d creation failed", i);
                 return ret;
 	    }
+    
+	    // pin to core
+            cpu_set_t cpuset;
+            CPU_ZERO(&cpuset);
+            CPU_SET(i%16, &cpuset);
+
+            int rc = pthread_setaffinity_np(submit_thread_id, sizeof(cpu_set_t), &cpuset);
+            if (rc != 0) {
+                printf("Error calling pthread_setaffinity_np: %d\n", rc);
+                exit(1);
+	    }
         } 
     } else {
 	/** Start two async I/O submitting threads. */
         pthread_t submit_thread_id;
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < 16; i++) {
             int *thread_id = malloc(sizeof(int));
             *thread_id = i;
             ret = pthread_create(&submit_thread_id, NULL, _nvm_submit_thread_func, (void *)thread_id);
             if (ret) {
                 DEBUG("OPEN: nvm submit thread %d creation failed", i);
                 return ret;
+	    }
+	    
+	    // pin to core
+            cpu_set_t cpuset;
+            CPU_ZERO(&cpuset);
+            CPU_SET(i%16, &cpuset);
+
+            int rc = pthread_setaffinity_np(submit_thread_id, sizeof(cpu_set_t), &cpuset);
+            if (rc != 0) {
+                printf("Error calling pthread_setaffinity_np: %d\n", rc);
+                exit(1);
 	    }
         } 
     }
