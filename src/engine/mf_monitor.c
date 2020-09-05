@@ -117,12 +117,7 @@ _get_miss_ratio(ocf_core_t core)
 static inline double
 _get_throughput()
 {
-    double cur_time_ms = get_cur_time_ms();
-    double begin_time_ms = cur_time_ms
-                           - (MEASURE_THROUGHPUT_INTERVAL_US / 1000.0);
-
-    return cache_log_query_throughput(begin_time_ms, cur_time_ms)
-           + core_log_query_throughput(begin_time_ms, cur_time_ms);
+    return cache_query_write_throughput() / MEASURE_THROUGHPUT_INTERVAL_US * 1.0;  // MB/s
 }
 
 /**
@@ -157,8 +152,19 @@ static double
 monitor_measure_throughput(double load_admit)
 {
     monitor_set_load_admit(load_admit);
+    
+    double throughput = 0.0;
+    cache_query_read_throughput();
+    core_query_read_throughput();
+
     usleep(MEASURE_THROUGHPUT_INTERVAL_US);
-    return _get_throughput();
+    
+    throughput += cache_query_read_throughput();
+    throughput += core_query_read_throughput();
+    
+    throughput = throughput / MEASURE_THROUGHPUT_INTERVAL_US; // MB/s
+    printf("%lf measure throughput as: %lf\n", load_admit, throughput);
+    return throughput;
 }
 
 /**

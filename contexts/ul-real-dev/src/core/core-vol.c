@@ -145,11 +145,11 @@ _submit_thread_func(void *args)
 	if (addr_formatted % 2 == 0) {
 	    // read
 	    addr_formatted = addr_formatted / 2;
-	    io_prep_pread(p, core_sock_fd, core_io_buf, 4096, addr_formatted);
+	    io_prep_pread(p, core_sock_fd, core_io_buf, 4096 * 4, addr_formatted);
 	} else {
 	    // write
 	    addr_formatted = addr_formatted / 2;
-	    io_prep_pwrite(p, core_sock_fd, core_io_buf, 4096, addr_formatted);
+	    io_prep_pwrite(p, core_sock_fd, core_io_buf, 4096 * 4, addr_formatted);
 	}
 	//io_prep_pread(p, core_sock_fd, core_io_buf, 4096, core_io_addrs[next_io]);
 	p->data = (void *) core_io_buf;

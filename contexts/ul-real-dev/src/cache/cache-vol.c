@@ -185,28 +185,41 @@ _nvm_submit_thread_func(void *args)
 
     printf("====== Cache: Started a NVM submit thread %d for submitting IOs\n", thread_id);
     int next_io = 0;
+    int counter = 0;
+    double last_timestamp = 0.0;
+    
     while (1) {
 	next_io = env_atomic_inc_return(&next_io_pointer);
 	while (next_io >= env_atomic_read(&last_io_pointer)) ;
         next_io = next_io % IO_QUEUE_SIZE;
         
 	uint64_t *start = (uint64_t *) (cache_map + (cache_fastrand() % 1000000) * 4096);
-        //printf("read from %ld \n", start);	
         
 	uint64_t addr_formatted = io_addrs[next_io]; 
-	//uint64_t local_counter = 1;
 	volatile uint64_t local_counter = 0; 
 	if (addr_formatted % 2 == 0) {
 	    // read
 	    //addr_formatted = addr_formatted / 2;
 	    //memcpy((void *)io_buf, (void *)start, 4096 * 2);
-	    for (uint64_t j = 0; j< 4096 / 8; j += 8) {
+	    for (uint64_t j = 0; j< 4096*4 / 8; j += 8) {
 		local_counter += start[j];
 	    }
+                
+	    env_atomic_add(4096 * 4, &cache_read_counter);
 	} else {
 	    // write
 	    //addr_formatted = addr_formatted / 2;
             //_mm512_stream_si512 ((__m512i*)(start + j), write_data_vec);
+            env_atomic_add(4096 * 4, &cache_write_counter);
+        }
+
+	counter += 1;
+
+	if (counter % 1000000 == 0) {
+	    double cur_timestamp = get_cur_time_ms();
+	    printf("Cache: Thread %d finished %d ios in last %f ms, throughput: %f iops\n", thread_id, counter, cur_timestamp - last_timestamp, counter / (cur_timestamp - last_timestamp) * 1000.0);
+	    counter = 0;
+	    last_timestamp = get_cur_time_ms();
         }
     }
 
@@ -280,7 +293,7 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
         }
     
         /** Start two async I/O submitting threads. */
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 2; i++) {
             int *thread_id = malloc(sizeof(int));
             *thread_id = i;
             ret = pthread_create(&submit_thread_id, NULL, _submit_thread_func, (void *)thread_id);
@@ -315,7 +328,7 @@ cache_vol_open(ocf_volume_t cache_vol, void *params)
 
 	/** Start NVDIMM access threads. */
         pthread_t submit_thread_id;
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 6; i++) {
             int *thread_id = malloc(sizeof(int));
             *thread_id = i;
             ret = pthread_create(&submit_thread_id, NULL, _nvm_submit_thread_func, (void *)thread_id);
