@@ -14,6 +14,7 @@
 #include <ocf/ocf.h>
 #include <fcntl.h>
 #include <libaio.h>
+#include <immintrin.h>
 
 #include "simfs/simfs-ctx.h"
 #include "cache-obj.h"
@@ -209,8 +210,22 @@ _nvm_submit_thread_func(void *args)
 	} else {
 	    // write
 	    //addr_formatted = addr_formatted / 2;
-            //_mm512_stream_si512 ((__m512i*)(start + j), write_data_vec);
-            env_atomic_add(4096 * 4, &cache_write_counter);
+            __m512i write_data_vec;
+	    
+	    uint8_t * write_data;
+            write_data = (uint8_t *) malloc(sizeof(uint8_t) * 128);
+            while (((uint64_t) write_data) % 64 != 0) // Align to 64 byte
+                write_data++;
+            assert(((uint64_t) write_data) % 64 == 0);
+            memset(write_data, 't', 64);
+            write_data_vec = _mm512_stream_load_si512(write_data);
+            
+
+	    for (uint64_t j = 0; j< 4096*4 / 8; j += 8) {
+                _mm512_stream_si512 ((__m512i*)(start + j), write_data_vec);
+	    }
+
+	    env_atomic_add(4096 * 4, &cache_write_counter);
         }
 
 	counter += 1;
