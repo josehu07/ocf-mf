@@ -94,14 +94,24 @@ monitor_query_load_admit(void)
 static struct file *
 file_open(const char *path, int flags, int rights)
 {
-    struct file *filp = NULL;
+    /*struct file *filp = NULL;
     mm_segment_t oldfs;
     int err = 0;
 
     oldfs = get_fs();
-    set_fs(get_ds());
+    set_fs(KERNEL_DS);
     filp = filp_open(path, flags, rights);
     set_fs(oldfs);
+
+    if (IS_ERR(filp)) {
+        err = PTR_ERR(filp);
+        return NULL;
+    }*/
+    
+    struct file *filp = NULL;
+    int err = 0;
+
+    filp = filp_open(path, flags, rights);
 
     if (IS_ERR(filp)) {
         err = PTR_ERR(filp);
@@ -121,15 +131,19 @@ static ssize_t
 file_read(struct file *file, unsigned long long offset, unsigned char *data,
           unsigned int size)
 {
-    mm_segment_t oldfs;
+    /*mm_segment_t oldfs;
     ssize_t ret;
 
     oldfs = get_fs();
-    set_fs(get_ds());
+    set_fs(KERNEL_DS);
 
     ret = vfs_read(file, data, size, &offset);
 
     set_fs(oldfs);
+    */
+    
+    ssize_t ret;
+    ret = kernel_read(file, data, size, &offset);
     return ret;
 }
 
@@ -137,18 +151,18 @@ file_read(struct file *file, unsigned long long offset, unsigned char *data,
 /**
  * Kernel timing utility.
  */
-static struct timeval boot_tv;
+static struct timespec64 boot_tv;
 
 static int64_t
 _get_cur_time_ms(void)
 {
-    struct timeval cur_tv;
+    struct timespec64 cur_tv;
     int64_t cur_time_ms;
 
-    do_gettimeofday(&cur_tv);
+    ktime_get_real_ts64(&cur_tv);
 
     cur_time_ms = (cur_tv.tv_sec - boot_tv.tv_sec) * 1000
-                  + (cur_tv.tv_usec - boot_tv.tv_usec) / 1000;
+                  + (cur_tv.tv_nsec - boot_tv.tv_nsec) / 1000000;
 
     return cur_time_ms;
 }
@@ -574,7 +588,7 @@ ocf_mngt_mf_monitor_start(ocf_core_t core)
     env_rwlock_init(&data_admit_lock);
     env_rwlock_init(&load_admit_lock);
 
-    do_gettimeofday(&boot_tv);
+    ktime_get_real_ts64(&boot_tv);
 
     /** Open block device stat files. */
     cache_stat = file_open(CACHE_STAT_FILENAME, O_RDONLY, 0);
