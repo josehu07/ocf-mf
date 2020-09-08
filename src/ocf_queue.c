@@ -77,6 +77,7 @@ void ocf_io_handle(struct ocf_io *io, void *opaque)
 
 	OCF_CHECK_NULL(req);
 
+
 	if (req->rw == OCF_WRITE)
 		req->io_if->write(req);
 	else

@@ -48,7 +48,7 @@ static inline bool load_admit_allow(void)
     unsigned prob;
 
     get_random_bytes(&rand, sizeof(int));
-    prob = ((unsigned) (rand % 100)) % 100;
+    prob = ((unsigned) (rand % 10000)) % 10000;
 
     return prob <= load_admit;
 }

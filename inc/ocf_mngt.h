@@ -713,7 +713,8 @@ void ocf_mngt_cache_save(ocf_cache_t cache,
  */
 static inline bool ocf_mngt_cache_mode_has_lazy_write(ocf_cache_mode_t mode)
 {
-	return mode == ocf_cache_mode_wb || mode == ocf_cache_mode_wo;
+	return mode == ocf_cache_mode_wb || mode == ocf_cache_mode_wo
+	       || mode == ocf_cache_mode_mfwb;
 }
 
 /**
