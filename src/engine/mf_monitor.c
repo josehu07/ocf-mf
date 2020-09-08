@@ -190,16 +190,16 @@ static char cas_stat_buf[1024];
 /*========== Multi-factor algorithm logic BEGIN ==========*/
 
 /** Do not attempt tuning when miss ratio is higher than X. */
-static const int MISS_RATIO_TUNING_BOUND = 3000;    // 20%.
+static const int MISS_RATIO_TUNING_BOUND = 3000;    // 30%.
 
 /** Consider cache is stable if miss ratio within OLD_RATIO +- X. */
-static const int WAIT_STABLE_THRESHOLD = 5;         // 0.05%.
+static const int WAIT_STABLE_THRESHOLD = 10;         // 0.10%.
 
 /** Sleep X microseconds when detecting cache stability. */
-static const int WAIT_STABLE_SLEEP_INTERVAL_US = 1000000;
+static const int WAIT_STABLE_SLEEP_INTERVAL_US = 100000; //0.1s
 
 /** Consider workload change when miss ratio > BASE_RATIO + X. */
-static const int WORKLOAD_CHANGE_THRESHOLD = 2000;  // 20%.
+static const int WORKLOAD_CHANGE_THRESHOLD = 5000;  // 50%.
 
 /** `load_admit` tuning step size. */
 static const int LOAD_ADMIT_TUNING_STEP = 100;      // 1%.
@@ -231,14 +231,18 @@ _get_miss_ratio(ocf_core_t core)
 
 
 	// set to zero
-	env_atomic64_set(&curr->total, 1); 
+	env_atomic64_set(&curr->total, 0); 
 	env_atomic64_set(&curr->partial_miss, 0); 
 	env_atomic64_set(&curr->full_miss, 0); 
     }
 
-    if (total <= 0)
+    if (total < 0)
         return -1;
 
+    if (total == 0)
+        return 10000;
+	    
+	    
     miss_ratio = (misses * 10000) / total;
 
     return miss_ratio;
@@ -535,12 +539,11 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
              */
             int miss_ratio = _get_miss_ratio(core);
 
-            if (miss_ratio > MISS_RATIO_TUNING_BOUND
-                || miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD
+            if (miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD
                 || miss_ratio < base_miss_ratio - WORKLOAD_CHANGE_THRESHOLD) {
                 if (MONITOR_VERBOSE_LOG) {
                     printk(KERN_ALERT "MONITOR: (tune) miss ratio changed too"
-                                      " far, quit\n");
+                                      " far(%d -> %d, %d), quit\n", base_miss_ratio, miss_ratio, WORKLOAD_CHANGE_THRESHOLD);
                 }
                 return;
             }
