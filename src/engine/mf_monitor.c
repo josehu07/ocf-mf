@@ -205,7 +205,7 @@ static const int WORKLOAD_CHANGE_THRESHOLD = 2000;  // 20%.
 static const int LOAD_ADMIT_TUNING_STEP = 100;      // 1%.
 
 /** Measure throughput for a `load_admit` value for X microseconds. */
-static const int MEASURE_THROUGHPUT_INTERVAL_US = 5000;
+static const int MEASURE_THROUGHPUT_INTERVAL_US = 50000;
 
 /** How many chances given to not quit on `load_admit` 100%. */
 static const int NOT_QUIT_ON_100_CHANCES = 1;
@@ -219,7 +219,7 @@ _get_miss_ratio(ocf_core_t core)
     struct ocf_counters_req *curr;
     uint64_t misses = 0, total = 0;
     uint32_t i;
-    int miss_ratio = -1;
+    int miss_ratio = 10000;
 
     for (i = 0; i != OCF_IO_CLASS_MAX; ++i) {
         curr = &core->counters->part_counters[i].read_reqs;
@@ -354,7 +354,7 @@ monitor_measure_throughput(int load_admit)
             kstrtoll(cas_counter, 10, &cas_read_ticks_old);
     }
     
-    printk("=== MONITOR: Measured throughput: old_time: %lld, old read sectors: %lld, old write sectors: %lld, old cache write sectors: %lld", old_time_ms, cas_read_sectors_old, cas_write_sectors_old, cache_write_sectors_old);
+    //printk("=== MONITOR: Measured throughput: old cas time: %lld, old cas read sectors: %lld, old cas read ticks: %lld, old cas read requests: %lld, old cas write sectors: %lld, old cache write sectors: %lld", old_time_ms, cas_read_sectors_old, cas_read_ticks_old, cas_read_requests_old, cas_write_sectors_old, cache_write_sectors_old);
 
     /** Set `load_admit` and sleep for some time. */
     monitor_set_load_admit(load_admit);
@@ -435,7 +435,8 @@ monitor_measure_throughput(int load_admit)
 	else if (count == 3)
             kstrtoll(cas_counter, 10, &cas_read_ticks_new);
     }
-    printk("MONITOR: Measured throughput: new_time: %lld, new read sectors: %lld, new write sectors: %lld, new cache write sectors: %lld", new_time_ms, cas_read_sectors_new, cas_write_sectors_new, cache_write_sectors_new);
+    
+    //printk("MONITOR: Measured throughput: new cas time: %lld, new cas read sectors: %lld, new cas read ticks: %lld, new cas read requests: %lld, new cas write sectors: %lld, new cache write sectors: %lld", new_time_ms, cas_read_sectors_new, cas_read_ticks_new, cas_read_requests_new, cas_write_sectors_new, cache_write_sectors_new);
 
     if (new_time_ms > old_time_ms) {
         /*throughput += (int64_t) (500
@@ -450,9 +451,11 @@ monitor_measure_throughput(int load_admit)
         throughput += (int64_t) (500
                       * (cas_read_sectors_new - cas_read_sectors_old))
                       / (new_time_ms  - old_time_ms);
-        latency += (int64_t) (1000 
-		      * (cas_read_ticks_new - cas_read_sectors_old)) 
-		      / (cas_read_requests_new - cas_read_requests_old);
+        if (cas_read_requests_new != cas_read_requests_old) {
+	    latency += (int64_t) (1000 
+		       * (cas_read_ticks_new - cas_read_ticks_old)) 
+		       / (cas_read_requests_new - cas_read_requests_old);
+	}
     }
     printk("MONITOR: Measured throughput: %lld, latency %lld us, for load admit %d", throughput, latency, load_admit);
     return throughput;
@@ -464,7 +467,7 @@ monitor_measure_throughput(int load_admit)
 static int
 monitor_wait_stable(ocf_core_t core)
 {
-    int last_miss_ratio = -1;
+    int last_miss_ratio = 10000;
     int miss_ratio = _get_miss_ratio(core);
 
     while (miss_ratio > MISS_RATIO_TUNING_BOUND
@@ -636,14 +639,13 @@ monitor_func(void *core_ptr)
         }
 
         /** Start a new workload with classic caching. */
-        //if (MONITOR_VERBOSE_LOG)
-        //    printk(KERN_ALERT "MONITOR: (fall) start classic caching\n");
+        if (MONITOR_VERBOSE_LOG)
+            printk(KERN_ALERT "MONITOR: (fall) start classic caching\n");
 	monitor_set_data_admit(true);
         //monitor_set_data_admit(false);
-        //monitor_set_load_admit(10000);
-        monitor_set_load_admit(5000);
-        //monitor_set_load_admit(0);
-	continue;
+        monitor_set_load_admit(10000);
+        //monitor_set_load_admit(5000);
+	//continue;
 
         /** Wait until cache is stable. */
         base_miss_ratio = monitor_wait_stable(core);
