@@ -117,21 +117,21 @@ file_close(struct file *file)
     filp_close(file, NULL);
 }
 
-// static ssize_t
-// file_read(struct file *file, unsigned long long offset, unsigned char *data,
-//           unsigned int size)
-// {
-//     mm_segment_t oldfs;
-//     ssize_t ret;
+static ssize_t
+file_read(struct file *file, unsigned long long offset, unsigned char *data,
+          unsigned int size)
+{
+    mm_segment_t oldfs;
+    ssize_t ret;
 
-//     oldfs = get_fs();
-//     set_fs(KERNEL_DS);
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
 
-//     ret = vfs_read(file, data, size, &offset);
+    ret = vfs_read(file, data, size, &offset);
 
-//     set_fs(oldfs);
-//     return ret;
-// }
+    set_fs(oldfs);
+    return ret;
+}
 
 
 /**
@@ -139,19 +139,19 @@ file_close(struct file *file)
  */
 static struct timeval boot_tv;
 
-// static int64_t
-// _get_cur_time_ms(void)
-// {
-//     struct timeval cur_tv;
-//     int64_t cur_time_ms;
+static int64_t
+_get_cur_time_ms(void)
+{
+    struct timeval cur_tv;
+    int64_t cur_time_ms;
 
-//     do_gettimeofday(&cur_tv);
+    do_gettimeofday(&cur_tv);
 
-//     cur_time_ms = (cur_tv.tv_sec - boot_tv.tv_sec) * 1000
-//                   + (cur_tv.tv_usec - boot_tv.tv_usec) / 1000;
+    cur_time_ms = (cur_tv.tv_sec - boot_tv.tv_sec) * 1000
+                  + (cur_tv.tv_usec - boot_tv.tv_usec) / 1000;
 
-//     return cur_time_ms;
-// }
+    return cur_time_ms;
+}
 
 
 /** For block device throughput measurement. */
@@ -161,8 +161,8 @@ static const char *CORE_STAT_FILENAME  = "/sys/block/sdb/stat";
 static struct file *cache_stat;
 static struct file *core_stat;
 
-// static char cache_stat_buf[1024];
-// static char core_stat_buf[1024];
+static char cache_stat_buf[1024];
+static char core_stat_buf[1024];
 
 
 /*========== Multi-factor algorithm logic BEGIN ==========*/
@@ -197,7 +197,7 @@ _get_miss_ratio(ocf_core_t core)
     struct ocf_counters_req *curr;
     uint64_t misses = 0, total = 0;
     uint32_t i;
-    int miss_ratio = -1;
+    int miss_ratio = 10000;
 
     for (i = 0; i != OCF_IO_CLASS_MAX; ++i) {
         curr = &core->counters->part_counters[i].read_reqs;
@@ -209,7 +209,7 @@ _get_miss_ratio(ocf_core_t core)
     }
 
     if (total <= 0)
-        return -1;
+        return 10000;
 
     miss_ratio = (misses * 10000) / total;
 
@@ -227,279 +227,279 @@ _get_miss_ratio(ocf_core_t core)
  *
  * Returns throughput as an in64_t in KiB/s.
  */
-// static int64_t
-// monitor_measure_throughput(int load_admit)
-// {
-//     int64_t cache_read_sectors_old = 0, cache_write_sectors_old = 0,
-//             cache_read_sectors_new = 0, cache_write_sectors_new = 0,
-//             core_read_sectors_old  = 0, core_write_sectors_old  = 0,
-//             core_read_sectors_new  = 0, core_write_sectors_new  = 0;
-//     int64_t old_time_ms = 0, new_time_ms = 0;
-//     int64_t throughput = 0;
+static int64_t
+monitor_measure_throughput(int load_admit)
+{
+    int64_t cache_read_sectors_old = 0, cache_write_sectors_old = 0,
+            cache_read_sectors_new = 0, cache_write_sectors_new = 0,
+            core_read_sectors_old  = 0, core_write_sectors_old  = 0,
+            core_read_sectors_new  = 0, core_write_sectors_new  = 0;
+    int64_t old_time_ms = 0, new_time_ms = 0;
+    int64_t throughput = 0;
 
-//     char *cache_stat_tmp, *core_stat_tmp;
-//     char *cache_counter, *core_counter;
-//     int count;
+    char *cache_stat_tmp, *core_stat_tmp;
+    char *cache_counter, *core_counter;
+    int count;
 
-//     /** Record old counters. */
-//     ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
-//     ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
+    /** Record old counters. */
+    ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
+    ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
 
-//     old_time_ms = _get_cur_time_ms();
+    old_time_ms = _get_cur_time_ms();
 
-//     cache_stat_tmp = cache_stat_buf;
-//     while (*cache_stat_tmp == ' ')
-//         cache_stat_tmp++;
-//     for (count = 0; count < 7; ++count) {
-//         cache_counter = cache_stat_tmp;
+    cache_stat_tmp = cache_stat_buf;
+    while (*cache_stat_tmp == ' ')
+        cache_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        cache_counter = cache_stat_tmp;
 
-//         while (*cache_stat_tmp != ' ' && *cache_stat_tmp != '\0')
-//             cache_stat_tmp++;
-//         if (*cache_stat_tmp == '\0')
-//             break;
-//         *(cache_stat_tmp++) = '\0';
-//         while (*cache_stat_tmp == ' ')
-//             cache_stat_tmp++;
+        while (*cache_stat_tmp != ' ' && *cache_stat_tmp != '\0')
+            cache_stat_tmp++;
+        if (*cache_stat_tmp == '\0')
+            break;
+        *(cache_stat_tmp++) = '\0';
+        while (*cache_stat_tmp == ' ')
+            cache_stat_tmp++;
 
-//         if (count == 2)
-//             kstrtoll(cache_counter, 10, &cache_read_sectors_old);
-//         else if (count == 6)
-//             kstrtoll(cache_counter, 10, &cache_write_sectors_old);
-//     }
+        if (count == 2)
+            kstrtoll(cache_counter, 10, &cache_read_sectors_old);
+        else if (count == 6)
+            kstrtoll(cache_counter, 10, &cache_write_sectors_old);
+    }
 
-//     core_stat_tmp = core_stat_buf;
-//     while (*core_stat_tmp == ' ')
-//         core_stat_tmp++;
-//     for (count = 0; count < 7; ++count) {
-//         core_counter = core_stat_tmp;
+    core_stat_tmp = core_stat_buf;
+    while (*core_stat_tmp == ' ')
+        core_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        core_counter = core_stat_tmp;
 
-//         while (*core_stat_tmp != ' ' && *core_stat_tmp != '\0')
-//             core_stat_tmp++;
-//         if (*core_stat_tmp == '\0')
-//             break;
-//         *(core_stat_tmp++) = '\0';
-//         while (*core_stat_tmp == ' ')
-//             core_stat_tmp++;
+        while (*core_stat_tmp != ' ' && *core_stat_tmp != '\0')
+            core_stat_tmp++;
+        if (*core_stat_tmp == '\0')
+            break;
+        *(core_stat_tmp++) = '\0';
+        while (*core_stat_tmp == ' ')
+            core_stat_tmp++;
 
-//         if (count == 2)
-//             kstrtoll(core_counter, 10, &core_read_sectors_old);
-//         else if (count == 6)
-//             kstrtoll(core_counter, 10, &core_write_sectors_old);
-//     }
+        if (count == 2)
+            kstrtoll(core_counter, 10, &core_read_sectors_old);
+        else if (count == 6)
+            kstrtoll(core_counter, 10, &core_write_sectors_old);
+    }
 
-//     /** Set `load_admit` and sleep for some time. */
-//     monitor_set_load_admit(load_admit);
-//     usleep_range(MEASURE_THROUGHPUT_INTERVAL_US,
-//                  MEASURE_THROUGHPUT_INTERVAL_US + 1);
+    /** Set `load_admit` and sleep for some time. */
+    monitor_set_load_admit(load_admit);
+    usleep_range(MEASURE_THROUGHPUT_INTERVAL_US,
+                 MEASURE_THROUGHPUT_INTERVAL_US + 1);
 
-//     /** Get new counters and calculate the throughputs. */
-//     ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
-//     ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
+    /** Get new counters and calculate the throughputs. */
+    ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
+    ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
 
-//     new_time_ms = _get_cur_time_ms();
+    new_time_ms = _get_cur_time_ms();
 
-//     cache_stat_tmp = cache_stat_buf;
-//     while (*cache_stat_tmp == ' ')
-//         cache_stat_tmp++;
-//     for (count = 0; count < 7; ++count) {
-//         cache_counter = cache_stat_tmp;
+    cache_stat_tmp = cache_stat_buf;
+    while (*cache_stat_tmp == ' ')
+        cache_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        cache_counter = cache_stat_tmp;
 
-//         while (*cache_stat_tmp != ' ' && *cache_stat_tmp != '\0')
-//             cache_stat_tmp++;
-//         if (*cache_stat_tmp == '\0')
-//             break;
-//         *(cache_stat_tmp++) = '\0';
-//         while (*cache_stat_tmp == ' ')
-//             cache_stat_tmp++;
+        while (*cache_stat_tmp != ' ' && *cache_stat_tmp != '\0')
+            cache_stat_tmp++;
+        if (*cache_stat_tmp == '\0')
+            break;
+        *(cache_stat_tmp++) = '\0';
+        while (*cache_stat_tmp == ' ')
+            cache_stat_tmp++;
 
-//         if (count == 2)
-//             kstrtoll(cache_counter, 10, &cache_read_sectors_new);
-//         else if (count == 6)
-//             kstrtoll(cache_counter, 10, &cache_write_sectors_new);
-//     }
+        if (count == 2)
+            kstrtoll(cache_counter, 10, &cache_read_sectors_new);
+        else if (count == 6)
+            kstrtoll(cache_counter, 10, &cache_write_sectors_new);
+    }
 
-//     core_stat_tmp = core_stat_buf;
-//     while (*core_stat_tmp == ' ')
-//         core_stat_tmp++;
-//     for (count = 0; count < 7; ++count) {
-//         core_counter = core_stat_tmp;
+    core_stat_tmp = core_stat_buf;
+    while (*core_stat_tmp == ' ')
+        core_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        core_counter = core_stat_tmp;
 
-//         while (*core_stat_tmp != ' ' && *core_stat_tmp != '\0')
-//             core_stat_tmp++;
-//         if (*core_stat_tmp == '\0')
-//             break;
-//         *(core_stat_tmp++) = '\0';
-//         while (*core_stat_tmp == ' ')
-//             core_stat_tmp++;
+        while (*core_stat_tmp != ' ' && *core_stat_tmp != '\0')
+            core_stat_tmp++;
+        if (*core_stat_tmp == '\0')
+            break;
+        *(core_stat_tmp++) = '\0';
+        while (*core_stat_tmp == ' ')
+            core_stat_tmp++;
 
-//         if (count == 2)
-//             kstrtoll(core_counter, 10, &core_read_sectors_new);
-//         else if (count == 6)
-//             kstrtoll(core_counter, 10, &core_write_sectors_new);
-//     }
+        if (count == 2)
+            kstrtoll(core_counter, 10, &core_read_sectors_new);
+        else if (count == 6)
+            kstrtoll(core_counter, 10, &core_write_sectors_new);
+    }
 
-//     if (new_time_ms > old_time_ms) {
-//         throughput += (int64_t) (500
-//                       * ((cache_read_sectors_new - cache_read_sectors_old)
-//                       + (cache_write_sectors_new - cache_write_sectors_old)))
-//                       / (new_time_ms  - old_time_ms);
-//         throughput += (int64_t) (500
-//                       * ((core_read_sectors_new - core_read_sectors_old)
-//                       + (core_write_sectors_new - core_write_sectors_old)))
-//                       / (new_time_ms  - old_time_ms);
-//     }
+    if (new_time_ms > old_time_ms) {
+        throughput += (int64_t) (500
+                      * ((cache_read_sectors_new - cache_read_sectors_old)
+                      + (cache_write_sectors_new - cache_write_sectors_old)))
+                      / (new_time_ms  - old_time_ms);
+        throughput += (int64_t) (500
+                      * ((core_read_sectors_new - core_read_sectors_old)
+                      + (core_write_sectors_new - core_write_sectors_old)))
+                      / (new_time_ms  - old_time_ms);
+    }
 
-//     return throughput;
-// }
+    return throughput;
+}
 
 /**
  * Wait until cache hit rate is stable. Returns the final miss ratio.
  */
-// static int
-// monitor_wait_stable(ocf_core_t core)
-// {
-//     int last_miss_ratio = -1;
-//     int miss_ratio = _get_miss_ratio(core);
+static int
+monitor_wait_stable(ocf_core_t core)
+{
+    int last_miss_ratio = 10000;
+    int miss_ratio = _get_miss_ratio(core);
 
-//     while (miss_ratio > MISS_RATIO_TUNING_BOUND
-//            || miss_ratio < last_miss_ratio - WAIT_STABLE_THRESHOLD
-//            || miss_ratio > last_miss_ratio + WAIT_STABLE_THRESHOLD) {
-//         if (kthread_should_stop())
-//             return -1;
+    while (miss_ratio > MISS_RATIO_TUNING_BOUND
+           || miss_ratio < last_miss_ratio - WAIT_STABLE_THRESHOLD
+           || miss_ratio > last_miss_ratio + WAIT_STABLE_THRESHOLD) {
+        if (kthread_should_stop())
+            return 10000;
 
-//         usleep_range(WAIT_STABLE_SLEEP_INTERVAL_US,
-//                      WAIT_STABLE_SLEEP_INTERVAL_US + 1);
+        usleep_range(WAIT_STABLE_SLEEP_INTERVAL_US,
+                     WAIT_STABLE_SLEEP_INTERVAL_US + 1);
         
-//         last_miss_ratio = miss_ratio;
-//         miss_ratio = _get_miss_ratio(core);
+        last_miss_ratio = miss_ratio;
+        miss_ratio = _get_miss_ratio(core);
 
-//         if (MONITOR_VERBOSE_LOG) {
-//             printk(KERN_ALERT "MONITOR: (wait) miss ratio = %-5d -> %-5d\n",
-//                    last_miss_ratio, miss_ratio);
-//         }
-//     }
+        if (MONITOR_VERBOSE_LOG) {
+            printk(KERN_ALERT "MONITOR: (wait) miss ratio = %-5d -> %-5d\n",
+                   last_miss_ratio, miss_ratio);
+        }
+    }
 
-//     return miss_ratio;
-// }
+    return miss_ratio;
+}
 
 /**
  * Repeatedly tune `load_admit` ratio until a workload change is
  * considered happened.
  */
-// static void
-// monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
-// {
-//     int la1, la2, la3;
-//     int64_t tp1, tp2, tp3;
-//     int chances = NOT_QUIT_ON_100_CHANCES;
-//     int64_t iteration = 0;
+static void
+monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
+{
+    int la1, la2, la3;
+    int64_t tp1, tp2, tp3;
+    int chances = NOT_QUIT_ON_100_CHANCES;
+    int64_t iteration = 0;
 
-//     while (1) {
-//         if (kthread_should_stop())
-//             return;
+    while (1) {
+        if (kthread_should_stop())
+            return;
 
-//         iteration++;
+        iteration++;
 
-//         /** Get middle ratio (current `load_admit`) throughput. */
-//         la2 = monitor_query_load_admit();
-//         if (MONITOR_VERBOSE_LOG && iteration % 100 == 1) {
-//             printk(KERN_ALERT "MONITOR: (tune) iter #%lld: load_admit = %-5d\n",
-//                    iteration, la2);
-//         }
-//         tp2 = monitor_measure_throughput(la2);
+        /** Get middle ratio (current `load_admit`) throughput. */
+        la2 = monitor_query_load_admit();
+        if (MONITOR_VERBOSE_LOG && iteration % 100 == 1) {
+            printk(KERN_ALERT "MONITOR: (tune) iter #%lld: load_admit = %-5d\n",
+                   iteration, la2);
+        }
+        tp2 = monitor_measure_throughput(la2);
 
-//         /** Get higher ratio throughput. */
-//         la3 = la2 + LOAD_ADMIT_TUNING_STEP;
-//         tp3 = la3 > 10000 ? -1 : monitor_measure_throughput(la3);
+        /** Get higher ratio throughput. */
+        la3 = la2 + LOAD_ADMIT_TUNING_STEP;
+        tp3 = la3 > 10000 ? -1 : monitor_measure_throughput(la3);
 
-//         /** Get lower ratio throughput. */
-//         la1 = la2 - LOAD_ADMIT_TUNING_STEP;
-//         tp1 = la1 < 0     ? -1 : monitor_measure_throughput(la1);
+        /** Get lower ratio throughput. */
+        la1 = la2 - LOAD_ADMIT_TUNING_STEP;
+        tp1 = la1 < 0     ? -1 : monitor_measure_throughput(la1);
 
-//         monitor_set_load_admit(la2);    /** Recover. */
+        monitor_set_load_admit(la2);    /** Recover. */
 
-//         /** Slope following loop. */
-//         while (1) {
-//             /**
-//              * Workload change check:
-//              * If detected workload change, quit and re-optimize.
-//              */
-//             int miss_ratio = _get_miss_ratio(core);
-//             if (miss_ratio > MISS_RATIO_TUNING_BOUND
-//                 || miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD
-//                 || miss_ratio < base_miss_ratio - WORKLOAD_CHANGE_THRESHOLD) {
-//                 if (MONITOR_VERBOSE_LOG) {
-//                     printk(KERN_ALERT "MONITOR: (tune) miss ratio changed too"
-//                                       " far, quit\n");
-//                 }
-//                 return;
-//             }
+        /** Slope following loop. */
+        while (1) {
+            /**
+             * Workload change check:
+             * If detected workload change, quit and re-optimize.
+             */
+            int miss_ratio = _get_miss_ratio(core);
+            if (miss_ratio > MISS_RATIO_TUNING_BOUND
+                || miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD
+                || miss_ratio < base_miss_ratio - WORKLOAD_CHANGE_THRESHOLD) {
+                if (MONITOR_VERBOSE_LOG) {
+                    printk(KERN_ALERT "MONITOR: (tune) miss ratio changed too"
+                                      " far, quit\n");
+                }
+                return;
+            }
 
-//             if (kthread_should_stop())
-//                 return;
+            if (kthread_should_stop())
+                return;
 
-//             /**
-//              * Middle ratio yields best throughput, goto intensity check.
-//              */
-//             if (tp2 >= tp1 && tp2 >= tp3) {
-//                 monitor_set_load_admit(la2);
-//                 break;
-//             }
+            /**
+             * Middle ratio yields best throughput, goto intensity check.
+             */
+            if (tp2 >= tp1 && tp2 >= tp3) {
+                monitor_set_load_admit(la2);
+                break;
+            }
 
-//             /**
-//              * Higher ratio yields best throughput, then shift to higher
-//              * `load_admit` value.
-//              */
-//             if (tp3 >= tp1 && tp3 >= tp2) {
-//                 if (la3 >= 10000) {
-//                     monitor_set_load_admit(10000);
-//                     break;
-//                 } else {
-//                     la1 = la2; tp1 = tp2;
-//                     la2 = la3; tp2 = tp3;
-//                     la3 = la3 + LOAD_ADMIT_TUNING_STEP;
-//                     tp3 = la3 > 10000 ? -1 : monitor_measure_throughput(la3);
-//                     continue;
-//                 }
-//             }
+            /**
+             * Higher ratio yields best throughput, then shift to higher
+             * `load_admit` value.
+             */
+            if (tp3 >= tp1 && tp3 >= tp2) {
+                if (la3 >= 10000) {
+                    monitor_set_load_admit(10000);
+                    break;
+                } else {
+                    la1 = la2; tp1 = tp2;
+                    la2 = la3; tp2 = tp3;
+                    la3 = la3 + LOAD_ADMIT_TUNING_STEP;
+                    tp3 = la3 > 10000 ? -1 : monitor_measure_throughput(la3);
+                    continue;
+                }
+            }
 
-//             /**
-//              * Lower ratio yields best throughput, then shift to lower
-//              * `load_admit` value.
-//              */
-//             if (tp1 >= tp2 && tp1 >= tp3) {
-//                 if (la1 <= 0) {
-//                     monitor_set_load_admit(0);
-//                     break;
-//                 } else {
-//                     la3 = la2; tp3 = tp2;
-//                     la2 = la1; tp2 = tp1;
-//                     la1 = la1 - LOAD_ADMIT_TUNING_STEP;
-//                     tp1 = la1 < 0     ? -1 : monitor_measure_throughput(la1);
-//                     continue;
-//                 }
-//             }
-//         }
+            /**
+             * Lower ratio yields best throughput, then shift to lower
+             * `load_admit` value.
+             */
+            if (tp1 >= tp2 && tp1 >= tp3) {
+                if (la1 <= 0) {
+                    monitor_set_load_admit(0);
+                    break;
+                } else {
+                    la3 = la2; tp3 = tp2;
+                    la2 = la1; tp2 = tp1;
+                    la1 = la1 - LOAD_ADMIT_TUNING_STEP;
+                    tp1 = la1 < 0     ? -1 : monitor_measure_throughput(la1);
+                    continue;
+                }
+            }
+        }
 
-//         /**
-//          * Intensity check:
-//          * If client's request intensity cannot fill cache bandwidth, then fall
-//          * back to classic caching.
-//          */
-//         if (monitor_query_load_admit() == 10000) {
-//             if (chances > 0) {      /** Give a second chance. */
-//                 chances--;
-//                 continue;
-//             } else {
-//                 if (MONITOR_VERBOSE_LOG) {
-//                     printk(KERN_ALERT "MONITOR: (tune) load_admit stays 100%%, "
-//                                       "quit\n");
-//                 }
-//                 return;
-//             }
-//         }
-//     }
-// }
+        /**
+         * Intensity check:
+         * If client's request intensity cannot fill cache bandwidth, then fall
+         * back to classic caching.
+         */
+        if (monitor_query_load_admit() == 10000) {
+            if (chances > 0) {      /** Give a second chance. */
+                chances--;
+                continue;
+            } else {
+                if (MONITOR_VERBOSE_LOG) {
+                    printk(KERN_ALERT "MONITOR: (tune) load_admit stays 100%%, "
+                                      "quit\n");
+                }
+                return;
+            }
+        }
+    }
+}
 
 /**
  * Monitor thread logic.
@@ -507,10 +507,10 @@ _get_miss_ratio(ocf_core_t core)
 static int
 monitor_func(void *core_ptr)
 {
-    // ocf_core_t core = core_ptr;
+    ocf_core_t core = core_ptr;
 
     while (1) {
-        // int base_miss_ratio;
+        int base_miss_ratio;
 
         if (kthread_should_stop()) {
             env_rwlock_destroy(&data_admit_lock);
@@ -523,38 +523,38 @@ monitor_func(void *core_ptr)
         }
 
         /** Start a new workload with classic caching. */
-        // if (MONITOR_VERBOSE_LOG)
-        //     printk(KERN_ALERT "MONITOR: (fall) start classic caching\n");
-        // monitor_set_data_admit(true);
-        // monitor_set_load_admit(10000);
+        if (MONITOR_VERBOSE_LOG)
+            printk(KERN_ALERT "MONITOR: (fall) start classic caching\n");
+        monitor_set_data_admit(true);
+        monitor_set_load_admit(10000);
 
-        monitor_set_data_admit(false);
-        monitor_set_load_admit(5000);
-        printk(KERN_ALERT "MONITOR: (waste)");
-        usleep_range(WAIT_STABLE_SLEEP_INTERVAL_US, WAIT_STABLE_SLEEP_INTERVAL_US + 1);
+        // monitor_set_data_admit(false);
+        // monitor_set_load_admit(5000);
+        // printk(KERN_ALERT "MONITOR: (waste)");
+        // usleep_range(WAIT_STABLE_SLEEP_INTERVAL_US, WAIT_STABLE_SLEEP_INTERVAL_US + 1);
 
         /** Wait until cache is stable. */
-        // base_miss_ratio = monitor_wait_stable(core);
-        // if (MONITOR_VERBOSE_LOG)
-        //     printk(KERN_ALERT "MONITOR: (wait) cache is stable\n");
+        base_miss_ratio = monitor_wait_stable(core);
+        if (MONITOR_VERBOSE_LOG)
+            printk(KERN_ALERT "MONITOR: (wait) cache is stable\n");
 
-        // if (kthread_should_stop()) {
-        //     env_rwlock_destroy(&data_admit_lock);
-        //     env_rwlock_destroy(&load_admit_lock);
+        if (kthread_should_stop()) {
+            env_rwlock_destroy(&data_admit_lock);
+            env_rwlock_destroy(&load_admit_lock);
 
-        //     file_close(cache_stat);
-        //     file_close(core_stat);
+            file_close(cache_stat);
+            file_close(core_stat);
 
-        //     break;
-        // }
+            break;
+        }
 
         /** Turn off `data_admit` and start `load_admit` tuning. */
-        // monitor_set_data_admit(false);
-        // if (MONITOR_VERBOSE_LOG) {
-        //     printk(KERN_ALERT "MONITOR: (tune) turn off data_admit & start "
-        //                       "tuning\n");
-        // }
-        // monitor_tune_load_admit(base_miss_ratio, core);
+        monitor_set_data_admit(false);
+        if (MONITOR_VERBOSE_LOG) {
+            printk(KERN_ALERT "MONITOR: (tune) turn off data_admit & start "
+                              "tuning\n");
+        }
+        monitor_tune_load_admit(base_miss_ratio, core);
     }
 
     return 0;
