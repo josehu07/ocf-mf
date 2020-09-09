@@ -294,9 +294,9 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
 
     /**
      * Stage 1 -
-     *   The first 15 secs are totally unstable.
+     *   The first 30 secs are totally unstable.
      */
-    printf("\nBegin stabilizing stage... (0 - 15 secs)\n\n");
+    printf("\nBegin stabilizing stage... (0 - 30 secs)\n\n");
 
     do {
         double new_time_ms = get_cur_time_ms();
@@ -340,7 +340,7 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
             return ret;
 
         usleep((int) (delta_ms * 1000));
-    } while (cur_time_ms < base_time_ms + 1000.0 * 15);
+    } while (cur_time_ms < base_time_ms + 1000.0 * 30);
 
     /**
      * Stage 2 -
@@ -397,7 +397,7 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
         count++;
 
         usleep((int) (delta_ms * 1000));
-    } while (cur_time_ms < base_time_ms + 1000.0 * 30);
+    } while (cur_time_ms < base_time_ms + 1000.0 * 45);
 
     avg_submit_elapsed_ms /= count;
     delta_ms -= avg_submit_elapsed_ms;
@@ -449,7 +449,7 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
         num_reqs += 10;
 
         usleep((int) (delta_ms * 1000));
-    } while (cur_time_ms < base_time_ms + 1000.0 * 60);
+    } while (cur_time_ms < base_time_ms + 1000.0 * 90);
 
     /**
      * Stage 4 -
@@ -493,7 +493,7 @@ bench_throughput(ocf_core_t core, int num_args, char **bench_args)
         }
 
         usleep((int) (delta_ms * 1000));
-    } while (cur_time_ms < base_time_ms + 1000.0 * 75);
+    } while (cur_time_ms < base_time_ms + 1000.0 * 105);
 
     return 0;
 }

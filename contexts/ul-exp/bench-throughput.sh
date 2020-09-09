@@ -12,7 +12,7 @@ for MODE in wa mfwa; do
     echo "Doing mode ${MODE}: "
 
     # for INTENSITY in {12000..22000..1000}; do
-    for INTENSITY in 6400 12800 19200 25600; do
+    for INTENSITY in 3200 6400 9600 12800 16000 19200 32400; do
         echo "  intensity = ${INTENSITY}"
 
         # for READ_PERCENTAGE in 100 95 50 0; do
@@ -23,22 +23,42 @@ for MODE in wa mfwa; do
             for HIT_RATIO in 99 80; do
                 echo "      hit_ratio = ${HIT_RATIO}"
                 
-		for TRY_NO in {1..5}; do
-                    echo "        try #${TRY_NO}"
+                if [ ${MODE} == "wa" ]; 
+                then
+                    for TRY_NO in {1..5}; do
+                        echo "        try #${TRY_NO}"
+                        while true; do
+                            sleep 5
+                            
+                            timeout 120s ./bench ${MODE} tp throughput ${INTENSITY} ${READ_PERCENTAGE} ${HIT_RATIO} \
+                                > result/result-int${INTENSITY}-read${READ_PERCENTAGE}-hit${HIT_RATIO}-${MODE}-tp.try${TRY_NO}.txt
 
-		    while true; do
-                        sleep 5
-                        
-                        timeout 90s ./bench ${MODE} throughput ${INTENSITY} ${READ_PERCENTAGE} ${HIT_RATIO} \
-                            > result/result-int${INTENSITY}-read${READ_PERCENTAGE}-hit${HIT_RATIO}-${MODE}.try${TRY_NO}.txt
+                            if [[ $? -eq 0 ]]; then
+                                break
+                            else
+                                echo "        retrying ..."
+                            fi
+                        done
+                    done
+                else
+                    for TUNING in tp la; do
+                        for TRY_NO in {1..5}; do
+                            echo "        try #${TRY_NO}"
+                            while true; do
+                                sleep 5
+                                
+                                timeout 120s ./bench ${MODE} ${TUNING} throughput ${INTENSITY} ${READ_PERCENTAGE} ${HIT_RATIO} \
+                                    > result/result-int${INTENSITY}-read${READ_PERCENTAGE}-hit${HIT_RATIO}-${MODE}-${TUNING}.try${TRY_NO}.txt
 
-                        if [[ $? -eq 0 ]]; then
-                            break
-                        else
-                            echo "        retrying ..."
-                        fi
-		    done
-                done
+                                if [[ $? -eq 0 ]]; then
+                                    break
+                                else
+                                    echo "        retrying ..."
+                                fi
+                            done
+                        done
+                    done
+                fi
             done
         done
     done

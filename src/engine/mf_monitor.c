@@ -180,7 +180,7 @@ _get_latency()
 	    return DBL_MAX;
 
     double alpha = (float)cache_number / (float)(cache_number + core_number);
-    // printf("alpha:%f, cache_latency:%f, core_latency:%f\n", alpha, cache_latency, core_latency);
+    printf("alpha:%f, cache_latency:%f, core_latency:%f\n", alpha, cache_latency, core_latency);
 
     return alpha * cache_latency + (1 - alpha) * core_latency;
 }
@@ -238,13 +238,14 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
         }
         stat2 = target_func[mode](la2);
 
-        /** Get higher ratio throughput. */
-        la3 = la2 + LOAD_ADMIT_TUNING_STEP;
-        stat3 = la3 > 1.0 ? limit_value : target_func[mode](la3);  
-
+        
         /** Get lower ratio throughput. */
         la1 = la2 - LOAD_ADMIT_TUNING_STEP;
         stat1 = la1 < 0.0 ? limit_value : target_func[mode](la1);
+        
+        /** Get higher ratio throughput. */
+        la3 = la2 + LOAD_ADMIT_TUNING_STEP;
+        stat3 = la3 > 1.0 ? limit_value : target_func[mode](la3);  
 
         monitor_set_load_admit(la2);    /** Recover. */
 	
@@ -262,12 +263,12 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
                 return;
             }
 
-	    // printf("load admit:%f %f %f, stat:%f %f %f\n", la1, la2, la3, stat1, stat2, stat3);
+	        printf("load admit:%f %f %f, stat:%f %f %f\n", la1, la2, la3, stat1, stat2, stat3);
             /**
              * Middle ratio yields best throughput, goto intensity check.
              */
             if (is_better[mode](stat2, stat1) && is_better[mode](stat2, stat3)) {
-		monitor_set_load_admit(la2);
+                monitor_set_load_admit(la2);
                 break;
             }
 
@@ -285,8 +286,10 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
                     la1 = la2; stat1 = stat2;
                     la2 = la3; stat2 = stat3;
                     la3 = la3 + LOAD_ADMIT_TUNING_STEP;
-                    stat3 = la3 > 1.0 ? limit_value : target_func[mode](la3);
-                    continue;
+                    // stat3 = la3 > 1.0 ? limit_value : target_func[mode](la3);
+                    // continue;
+                    monitor_set_load_admit(la2);
+                    break;
                 }
             }
 
@@ -302,8 +305,10 @@ monitor_tune_load_admit(double base_miss_ratio, ocf_core_t core, tune_mode_t mod
                     la3 = la2; stat3 = stat2;
                     la2 = la1; stat2 = stat1;
                     la1 = la1 - LOAD_ADMIT_TUNING_STEP;
-                    stat1 = la1 < 0.0 ? limit_value : target_func[mode](la1);
-                    continue;
+                    // stat1 = la1 < 0.0 ? limit_value : target_func[mode](la1);
+                    // continue;
+                    monitor_set_load_admit(la2);
+                    break;
                 }
             }
         }
