@@ -48,7 +48,7 @@ static inline bool load_admit_allow(void)
     unsigned prob;
 
     get_random_bytes(&rand, sizeof(int));
-    prob = ((unsigned) (rand % 100)) % 100;
+    prob = ((unsigned) (rand % 10000)) % 10000;
 
     return prob <= load_admit;
 }
@@ -361,6 +361,7 @@ int ocf_read_mfwa(struct ocf_request *req)
     req->data_admit_allowed = data_admit_allow();
     req->load_admit_allowed = load_admit_allow();
 
+    printk(KERN_ALERT "[ocf_read_mfwa] req -> sid: %lld \n", req -> sid);
     /** Set resume call backs. */
     req->io_if = &_io_if_read_mfwa_resume;
 
