@@ -208,7 +208,7 @@ static const int LOAD_ADMIT_TUNING_STEP = 100;      // 1%.
 static const int MEASURE_THROUGHPUT_INTERVAL_US = 50000;
 
 /** How many chances given to not quit on `load_admit` 100%. */
-static const int NOT_QUIT_ON_100_CHANCES = 1;
+static const int NOT_QUIT_ON_100_CHANCES = 2;
 
 /**
  * Query the stat component for read (partial + full) miss ratio info.
@@ -511,7 +511,7 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
         if (kthread_should_stop())
             return;
 
-        iteration++;
+	iteration++;
         
         /** Get middle ratio (current `load_admit`) throughput. */
         la2 = monitor_query_load_admit();
@@ -520,6 +520,7 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
                    iteration, la2);
         }
         tp2 = monitor_measure_throughput(la2);
+        
 
         /** Get higher ratio throughput. */
         la3 = la2 + LOAD_ADMIT_TUNING_STEP;
@@ -547,7 +548,7 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
                 }
                 return;
             }
-            
+	
 	    if (MONITOR_VERBOSE_LOG) {
                 printk(KERN_ALERT "MONITOR: (tune), la2 = %-5d, tp1 = %lld, tp2 = %lld, tp3 = %lld \n",
                        la2, tp1, tp2, tp3);
