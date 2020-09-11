@@ -18,9 +18,10 @@
 #include "cache_engine.h"
 #include "engine_debug.h"
 #include "../ocf_stats_priv.h"
+#include "../utils/utils_prio_heap.h"
 #include "../ocf_core_priv.h"
 #include "mf_monitor.h"
-
+#define MAX_LOG_SIZE 48000
 
 /** Enable kernel verbose logging? */
 static const bool MONITOR_VERBOSE_LOG = true;
@@ -38,6 +39,23 @@ static env_rwlock data_admit_lock;
 /** Reader-writer lock to protect `load_admit`. */
 static env_rwlock load_admit_lock;
 
+static env_rwlock latency_vec_lock;
+
+
+
+//========================== ORTHUS Change Starts Here==================//
+
+
+static int log_tail = -2;
+
+static int is_full = 0;
+
+static uint64_t *latency_vec = NULL;
+
+
+
+
+//========================== ORTHUS Change Starts Here==================//
 
 /**
  * Set switch value with writer lock.
@@ -352,6 +370,63 @@ monitor_measure_throughput(int load_admit)
     return throughput;
 }
 
+
+// int __gt(void *lhs, void* rhs) {
+//     return *((uint64_t *)lhs) < *((uint64_t *)rhs);
+// }
+
+static uint64_t _get_tail_latency(int percentage) {
+    int size = 0, i = 0, start = 0;
+    struct ptr_heap max_heap;
+    size_t heap_size = 0;
+    uint64_t avg_tail_latency = 0, tmp = 0, avg_latency = 0;
+    if (percentage > 100 || percentage < 0)
+        return ULONG_MAX;
+
+    env_rwlock_read_lock(&latency_vec_lock);
+    start = log_tail;
+
+    if (is_full) {
+        env_rwlock_read_unlock(&latency_vec_lock);
+        size = MAX_LOG_SIZE;
+    } else {
+        env_rwlock_read_unlock(&latency_vec_lock);
+        size = start + 1;
+    }
+
+    heap_size = size * (100 - percentage) / 100;
+    // printk(KERN_DEBUG "[_get_tail_latency] heap size:%ld, total logs: %d\n", heap_size, size);
+    if (heap_size == 0) return ULONG_MAX;
+    if (heap_init(&max_heap, heap_size * sizeof(uint64_t), GFP_KERNEL) < 0) {
+        printk(KERN_DEBUG "[_get_tail_latency] Run out of memeory\n");
+        return ULONG_MAX;
+    }
+
+    for ( ;i < size; i ++) {
+        // env_rwlock_read_lock(&latency_vec_lock);
+        tmp = latency_vec[start];
+        // env_rwlock_read_unlock(&latency_vec_lock);
+        avg_latency += tmp;
+        heap_insert(&max_heap, tmp);
+        if (start <= 0) start = MAX_LOG_SIZE;
+        else start = (start - 1) % MAX_LOG_SIZE;
+    }
+    i = 0;
+
+    for (; i < max_heap.size; i++) {
+        avg_tail_latency += max_heap.ptrs[i];
+    }
+    avg_tail_latency = avg_tail_latency / max_heap.size;
+    // printk(KERN_DEBUG "[_get_tail_latency] Average tail latency:%lld, Average latency:%lld, Number of requests:%d\n", avg_tail_latency, avg_latency / size, size);
+    heap_free(&max_heap);
+    env_rwlock_write_lock(&latency_vec_lock);
+    log_tail = -1;
+    is_full = 0;
+    env_rwlock_write_unlock(&latency_vec_lock);
+    return avg_tail_latency;
+}
+
+
 /**
  * Wait until cache hit rate is stable. Returns the final miss ratio.
  */
@@ -374,12 +449,19 @@ monitor_wait_stable(ocf_core_t core)
         miss_ratio = _get_miss_ratio(core);
 
         if (MONITOR_VERBOSE_LOG) {
-            printk(KERN_ALERT "MONITOR: (wait) miss ratio = %-5d -> %-5d\n",
+            printk(KERN_DEBUG "MONITOR: (wait) miss ratio = %-5d -> %-5d\n",
                    last_miss_ratio, miss_ratio);
         }
     }
 
     return miss_ratio;
+}
+
+uint64_t monitor_measure_tail_latency(int load_admit) {
+    monitor_set_load_admit(load_admit);
+    usleep_range(MEASURE_THROUGHPUT_INTERVAL_US,
+                 MEASURE_THROUGHPUT_INTERVAL_US + 1);
+    return _get_tail_latency(99); 
 }
 
 /**
@@ -407,6 +489,7 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
                    iteration, la2);
         }
         tp2 = monitor_measure_throughput(la2);
+        _get_tail_latency(99);
 
         /** Get higher ratio throughput. */
         la3 = la2 + LOAD_ADMIT_TUNING_STEP;
@@ -429,7 +512,7 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
                 || miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD
                 || miss_ratio < base_miss_ratio - WORKLOAD_CHANGE_THRESHOLD) {
                 if (MONITOR_VERBOSE_LOG) {
-                    printk(KERN_ALERT "MONITOR: (tune) miss ratio changed too"
+                    printk(KERN_DEBUG "MONITOR: (tune) miss ratio changed too"
                                       " far, quit\n");
                 }
                 return;
@@ -492,7 +575,7 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
                 continue;
             } else {
                 if (MONITOR_VERBOSE_LOG) {
-                    printk(KERN_ALERT "MONITOR: (tune) load_admit stays 100%%, "
+                    printk(KERN_DEBUG "MONITOR: (tune) load_admit stays 100%%, "
                                       "quit\n");
                 }
                 return;
@@ -501,6 +584,132 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
     }
 }
 
+
+/**
+ * Repeatedly tune `load_admit` ratio until a workload change is
+ * considered happened.
+ */
+static void
+monitor_tune_load_admit_tail_latency(int base_miss_ratio, ocf_core_t core)
+{
+    int la1, la2, la3;
+    uint64_t tla1, tla2, tla3;
+    int chances = NOT_QUIT_ON_100_CHANCES;
+    uint64_t iteration = 0;
+
+    while (1) {
+        if (kthread_should_stop())
+            return;
+
+        iteration++;
+
+        /** Get middle ratio (current `load_admit`) throughput. */
+        la2 = monitor_query_load_admit();
+        if (MONITOR_VERBOSE_LOG && iteration % 100 == 1) {
+            printk(KERN_ALERT "MONITOR: (tune) iter #%lld: load_admit = %-5d\n",
+                   iteration, la2);
+        }
+        tla2 = monitor_measure_tail_latency(la2);
+
+        /** Get higher ratio throughput. */
+        la3 = la2 + LOAD_ADMIT_TUNING_STEP;
+        tla3 = la3 > 10000 ? ULONG_MAX : monitor_measure_tail_latency(la3);
+
+        /** Get lower ratio throughput. */
+        la1 = la2 - LOAD_ADMIT_TUNING_STEP;
+        tla1 = la1 < 0     ? ULONG_MAX : monitor_measure_tail_latency(la1);
+
+        monitor_set_load_admit(la2);    /** Recover. */
+
+        /** Slope following loop. */
+        while (1) {
+            /**
+             * Workload change check:
+             * If detected workload change, quit and re-optimize.
+             */
+            int miss_ratio = _get_miss_ratio(core);
+            if (miss_ratio > MISS_RATIO_TUNING_BOUND
+                || miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD
+                || miss_ratio < base_miss_ratio - WORKLOAD_CHANGE_THRESHOLD) {
+                if (MONITOR_VERBOSE_LOG) {
+                    printk(KERN_DEBUG "MONITOR: (tune) miss ratio changed too"
+                                      " far, quit\n");
+                }
+                return;
+            }
+
+            if (kthread_should_stop())
+                return;
+
+            /**
+             * Middle ratio yields best throughput, goto intensity check.
+             */
+            if (tla2 <= tla1 && tla2 <= tla3) {
+                monitor_set_load_admit(la2);
+                break;
+            }
+
+            /**
+             * Higher ratio yields best throughput, then shift to higher
+             * `load_admit` value.
+             */
+            if (tla3 <= tla1 && tla3 <= tla2) {
+                if (la3 >= 10000) {
+                    monitor_set_load_admit(10000);
+                    break;
+                } else {
+                    la1 = la2; tla1 = tla2;
+                    la2 = la3; tla2 = tla3;
+                    la3 = la3 + LOAD_ADMIT_TUNING_STEP;
+                    tla3 = la3 > 10000 ? ULONG_MAX : monitor_measure_tail_latency(la3);
+                    continue;
+                }
+            }
+
+            /**
+             * Lower ratio yields best throughput, then shift to lower
+             * `load_admit` value.
+             */
+            if (tla1 <= tla2 && tla1 <= tla3) {
+                if (la1 <= 0) {
+                    monitor_set_load_admit(0);
+                    break;
+                } else {
+                    la3 = la2; tla3 = tla2;
+                    la2 = la1; tla2 = tla1;
+                    la1 = la1 - LOAD_ADMIT_TUNING_STEP;
+                    tla1 = la1 < 0     ? ULONG_MAX : monitor_measure_tail_latency(la1);
+                    continue;
+                }
+            }
+        }
+
+        /**
+         * Intensity check:
+         * If client's request intensity cannot fill cache bandwidth, then fall
+         * back to classic caching.
+         */
+        if (monitor_query_load_admit() == 10000) {
+            if (chances > 0) {      /** Give a second chance. */
+                chances--;
+                continue;
+            } else {
+                if (MONITOR_VERBOSE_LOG) {
+                    printk(KERN_DEBUG "MONITOR: (tune) load_admit stays 100%%, "
+                                      "quit\n");
+                }
+                return;
+            }
+        }
+    }
+}
+
+
+void (*tune_func[2])(int, ocf_core_t) = 
+{
+    monitor_tune_load_admit,
+    monitor_tune_load_admit_tail_latency,
+};
 /**
  * Monitor thread logic.
  */
@@ -546,10 +755,10 @@ monitor_func(void *core_ptr)
         /** Turn off `data_admit` and start `load_admit` tuning. */
         monitor_set_data_admit(false);
         if (MONITOR_VERBOSE_LOG) {
-            printk(KERN_ALERT "MONITOR: (tune) turn off data_admit & start "
+            printk(KERN_DEBUG "MONITOR: (tune) turn off data_admit & start "
                               "tuning\n");
         }
-        monitor_tune_load_admit(base_miss_ratio, core);
+        tune_func[1](base_miss_ratio, core);
     }
 
     return 0;
@@ -574,6 +783,7 @@ ocf_mngt_mf_monitor_start(ocf_core_t core)
     env_rwlock_init(&data_admit_lock);
     env_rwlock_init(&load_admit_lock);
 
+
     do_gettimeofday(&boot_tv);
 
     /** Open block device stat files. */
@@ -595,8 +805,23 @@ ocf_mngt_mf_monitor_start(ocf_core_t core)
     if (monitor_thread_st == NULL)
         return MF_MONITOR_START_ERR_THREAD_RUN;
 
-    printk(KERN_ALERT "MONITOR: Thread %d started running\n",
+    printk(KERN_DEBUG "MONITOR: Thread %d started running\n",
            monitor_thread_st->pid);
+
+
+    latency_vec = kmalloc(sizeof(uint64_t) * MAX_LOG_SIZE, GFP_KERNEL);
+    if (!latency_vec) {
+        printk(KERN_ALERT "latency vec allocation failed\n");
+        return -ENOMEM;
+    } else {
+        env_rwlock_init(&latency_vec_lock);
+        // env_atomic_inc(&log_tail);
+        env_rwlock_write_lock(&latency_vec_lock);
+        log_tail ++;
+        env_rwlock_write_unlock(&latency_vec_lock);
+    }
+    // flex_array_alloc(sizeof(uint64_t), MAX_LOG_SIZE, GFP_KERNEL);
+    // flex_array_prealloc(latency_vec, 0, MAX_LOG_SIZE - 1, GFP_KERNEL);
     return 0;
 }
 
@@ -608,10 +833,51 @@ ocf_mngt_mf_monitor_stop(void)
 {
     if (monitor_thread_st != NULL) {    // Only if started.
         kthread_stop(monitor_thread_st);
-        printk(KERN_ALERT "MONITOR: Thread %d stop signaled\n",
+        printk(KERN_DEBUG "MONITOR: Thread %d stop signaled\n",
                monitor_thread_st->pid);
         monitor_thread_st = NULL;
+        
+        env_rwlock_write_lock(&latency_vec_lock);
+        if (log_tail >= -1) {
+            //env_atomic_set(&log_tail, -2);
+            // env_atomic_set(&is_full, 0);
+            log_tail = -2;
+            is_full = 0;
+
+            // env_rwlock_write_lock(&latency_vec_lock);
+            // kfree(latency_vec);
+            // env_rwlock_write_unlock(&latency_vec_lock);
+            // env_rwlock_destroy(&latency_vec_lock);
+        }
+        env_rwlock_write_unlock(&latency_vec_lock);
+
+
+        // flex_array_free(latency_vec);
     }
 }
+
+
+void ocf_mngt_mf_monitor_report_latency(uint64_t latency) {
+    int pos = 0; 
+
+    env_rwlock_read_lock(&latency_vec_lock);
+    if (log_tail < -1) {
+        env_rwlock_read_unlock(&latency_vec_lock);
+        return;
+    }
+    env_rwlock_read_unlock(&latency_vec_lock);
+
+    env_rwlock_write_lock(&latency_vec_lock);
+    log_tail ++;
+    if (log_tail >= MAX_LOG_SIZE) {
+        is_full = 1;
+        log_tail %= MAX_LOG_SIZE;
+    }
+    env_rwlock_write_unlock(&latency_vec_lock);
+    pos = log_tail;
+    latency_vec[pos] = latency;
+
+}
+
 
 /*========== [Orthus FLAG END] ==========*/

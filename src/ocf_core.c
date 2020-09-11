@@ -260,8 +260,6 @@ void ocf_core_volume_submit_io(struct ocf_io *io)
 
 	ocf_io_get(io);
 
-	printk(KERN_ALERT "[ocf_core_volume_submit_io] Request sid: %lld\n", req -> sid);
-
 	ret = ocf_engine_hndl_req(req);
 	if (ret) {
 		dec_counter_if_req_was_dirty(req);

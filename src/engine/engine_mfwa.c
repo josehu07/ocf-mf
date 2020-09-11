@@ -361,7 +361,6 @@ int ocf_read_mfwa(struct ocf_request *req)
     req->data_admit_allowed = data_admit_allow();
     req->load_admit_allowed = load_admit_allow();
 
-    printk(KERN_ALERT "[ocf_read_mfwa] req -> sid: %lld \n", req -> sid);
     /** Set resume call backs. */
     req->io_if = &_io_if_read_mfwa_resume;
 

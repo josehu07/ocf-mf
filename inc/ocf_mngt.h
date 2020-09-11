@@ -1122,6 +1122,9 @@ int ocf_mngt_mf_monitor_start(ocf_core_t core);
  */
 void ocf_mngt_mf_monitor_stop(void);
 
+
+void ocf_mngt_mf_monitor_report_latency(uint64_t latency);
+
 /*========== [Orthus FLAG END] ==========*/
 
 #endif /* __OCF_CACHE_H__ */
