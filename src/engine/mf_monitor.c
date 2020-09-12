@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <asm/segment.h>
 #include <linux/buffer_head.h>
+#include <linux/random.h>
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
@@ -705,18 +706,44 @@ monitor_tune_load_admit_tail_latency(int base_miss_ratio, ocf_core_t core)
 }
 
 
-void (*tune_func[2])(int, ocf_core_t) = 
+static void
+monitor_tune_load_admit_avg_latency(int base_miss_ratio, ocf_core_t core)
 {
-    monitor_tune_load_admit,
-    monitor_tune_load_admit_tail_latency,
+    // TODO: Place hold of the average latency
+    return;
+}
+
+struct args {
+    ocf_core_t core;
+    ocf_tuning_mode_t tuning_mode;
 };
+
+static void (*tune_func[3])(int, ocf_core_t) = 
+{
+    [(int)ocf_mf_tp]monitor_tune_load_admit,
+    [(int)ocf_mf_tail_la]monitor_tune_load_admit_tail_latency,
+    [(int)ocf_mf_avg_la]monitor_tune_load_admit_avg_latency,
+};
+
+static char *tuning_mode_to_str[] =
+{
+    [(int)ocf_mf_tp]"Throughput",
+    [(int)ocf_mf_tail_la]"Tail Latency",
+    [(int)ocf_mf_avg_la]"Average Latency",
+};
+
+
+
 /**
  * Monitor thread logic.
  */
 static int
-monitor_func(void *core_ptr)
+monitor_func(void *args_ptr)
 {
-    ocf_core_t core = core_ptr;
+
+    ocf_core_t core = ((struct args*)args_ptr) -> core;
+    ocf_tuning_mode_t tuning_mode = ((struct args*)args_ptr) -> tuning_mode;
+    kfree(args_ptr);
 
     while (1) {
         int base_miss_ratio;
@@ -758,7 +785,7 @@ monitor_func(void *core_ptr)
             printk(KERN_DEBUG "MONITOR: (tune) turn off data_admit & start "
                               "tuning\n");
         }
-        tune_func[1](base_miss_ratio, core);
+        tune_func[(int)tuning_mode](base_miss_ratio, core);
     }
 
     return 0;
@@ -772,8 +799,9 @@ static struct task_struct *monitor_thread_st = NULL;
  * Setup multi-factor switches and sart the monitor thread.
  */
 int
-ocf_mngt_mf_monitor_start(ocf_core_t core)
+ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode)
 {
+    struct args *arg; 
     if (monitor_thread_st != NULL)  // Already started.
         return 0;
 
@@ -798,15 +826,17 @@ ocf_mngt_mf_monitor_start(ocf_core_t core)
         OCF_DEBUG_LOG(ocf_core_get_cache(core), "Unable to open core stat");
         return MF_MONITOR_START_ERR_CORE_STAT;
     }
-
+    arg = (struct args*)kmalloc(sizeof(struct args), GFP_KERNEL);
+    arg -> core = core;
+    arg -> tuning_mode = tuning_mode;
     /** Create the monitor thread. */
-    monitor_thread_st = kthread_run(monitor_func, (void *) core,
+    monitor_thread_st = kthread_run(monitor_func, (void *) arg,
                                     "mf_monitor_thread");
     if (monitor_thread_st == NULL)
         return MF_MONITOR_START_ERR_THREAD_RUN;
 
-    printk(KERN_DEBUG "MONITOR: Thread %d started running\n",
-           monitor_thread_st->pid);
+    printk(KERN_DEBUG "MONITOR: Thread %d started running with tuning mode:%s\n",
+           monitor_thread_st->pid, tuning_mode_to_str[(int) tuning_mode]);
 
 
     latency_vec = kmalloc(sizeof(uint64_t) * MAX_LOG_SIZE, GFP_KERNEL);
@@ -860,6 +890,15 @@ ocf_mngt_mf_monitor_stop(void)
 void ocf_mngt_mf_monitor_report_latency(uint64_t latency) {
     int pos = 0; 
 
+
+
+    int rand;
+    get_random_bytes(&rand, sizeof(int));
+
+    // Only sample 80% of the dataset
+    if (rand % 100 < 20)
+        return;
+    
     env_rwlock_read_lock(&latency_vec_lock);
     if (log_tail < -1) {
         env_rwlock_read_unlock(&latency_vec_lock);
