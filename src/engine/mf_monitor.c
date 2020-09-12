@@ -42,21 +42,12 @@ static env_rwlock load_admit_lock;
 
 static env_rwlock latency_vec_lock;
 
-
-
-//========================== ORTHUS Change Starts Here==================//
-
-
-static int log_tail = -2;
+static int log_tail = -1;
 
 static int is_full = 0;
 
 static uint64_t *latency_vec = NULL;
 
-
-
-
-//========================== ORTHUS Change Starts Here==================//
 
 /**
  * Set switch value with writer lock.
@@ -844,10 +835,11 @@ ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode)
         printk(KERN_ALERT "latency vec allocation failed\n");
         return -ENOMEM;
     } else {
-        env_rwlock_init(&latency_vec_lock);
+        if (log_tail == -1)
+            env_rwlock_init(&latency_vec_lock);
         // env_atomic_inc(&log_tail);
         env_rwlock_write_lock(&latency_vec_lock);
-        log_tail ++;
+        log_tail = 0;
         env_rwlock_write_unlock(&latency_vec_lock);
     }
     // flex_array_alloc(sizeof(uint64_t), MAX_LOG_SIZE, GFP_KERNEL);
@@ -868,14 +860,14 @@ ocf_mngt_mf_monitor_stop(void)
         monitor_thread_st = NULL;
         
         env_rwlock_write_lock(&latency_vec_lock);
-        if (log_tail >= -1) {
+        if (log_tail >= 0) {
             //env_atomic_set(&log_tail, -2);
             // env_atomic_set(&is_full, 0);
             log_tail = -2;
             is_full = 0;
 
             // env_rwlock_write_lock(&latency_vec_lock);
-            // kfree(latency_vec);
+            kfree(latency_vec);
             // env_rwlock_write_unlock(&latency_vec_lock);
             // env_rwlock_destroy(&latency_vec_lock);
         }
@@ -899,22 +891,20 @@ void ocf_mngt_mf_monitor_report_latency(uint64_t latency) {
     if (rand % 100 < 20)
         return;
     
-    env_rwlock_read_lock(&latency_vec_lock);
-    if (log_tail < -1) {
-        env_rwlock_read_unlock(&latency_vec_lock);
+    env_rwlock_write_lock(&latency_vec_lock);
+    if (log_tail < 0) {
+        env_rwlock_write_unlock(&latency_vec_lock);
         return;
     }
-    env_rwlock_read_unlock(&latency_vec_lock);
-
-    env_rwlock_write_lock(&latency_vec_lock);
-    log_tail ++;
     if (log_tail >= MAX_LOG_SIZE) {
         is_full = 1;
         log_tail %= MAX_LOG_SIZE;
     }
-    env_rwlock_write_unlock(&latency_vec_lock);
     pos = log_tail;
     latency_vec[pos] = latency;
+    log_tail ++;
+    env_rwlock_write_unlock(&latency_vec_lock);
+
 
 }
 
