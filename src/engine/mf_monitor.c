@@ -193,7 +193,7 @@ static const int WORKLOAD_CHANGE_THRESHOLD = 2000;  // 20%.
 static const int LOAD_ADMIT_TUNING_STEP = 100;      // 1%.
 
 /** Measure throughput for a `load_admit` value for X microseconds. */
-static const int MEASURE_THROUGHPUT_INTERVAL_US = 5000;
+static const int MEASURE_THROUGHPUT_INTERVAL_US =   25000;
 
 /** How many chances given to not quit on `load_admit` 100%. */
 static const int NOT_QUIT_ON_100_CHANCES = 1;
@@ -362,10 +362,12 @@ monitor_measure_throughput(int load_admit)
     return throughput;
 }
 
-
-// int __gt(void *lhs, void* rhs) {
-//     return *((uint64_t *)lhs) < *((uint64_t *)rhs);
-// }
+/** Get the tail latency from a circular log
+ *  ptr_heap is used to find the k largest latency in the latency
+ *  in order to find the tail latency
+ *  percentage is raning from 0 - 100 representing which porpotion of latency
+ *  is regarded as tail latency
+ */
 
 static uint64_t _get_tail_latency(int percentage) {
     int size = 0, i = 0, start = 0;
@@ -374,7 +376,7 @@ static uint64_t _get_tail_latency(int percentage) {
     uint64_t avg_tail_latency = 0, tmp = 0, avg_latency = 0;
     // int rand;
     if (percentage > 100 || percentage < 0)
-    return ULONG_MAX;
+        return ULONG_MAX;
 
     env_rwlock_read_lock(&latency_vec_lock);
     start = log_tail;
@@ -414,7 +416,7 @@ static uint64_t _get_tail_latency(int percentage) {
         avg_tail_latency += max_heap.ptrs[i];
     }
     avg_tail_latency = avg_tail_latency / max_heap.size;
-    printk(KERN_DEBUG "[_get_tail_latency] Average tail latency:%lld, Average latency:%lld, Number of requests:%d\n", avg_tail_latency, avg_latency / size, size);
+    // printk(KERN_DEBUG "[_get_tail_latency] Average tail latency:%llu, Average latency:%llu, Number of requests:%d\n", avg_tail_latency, avg_latency / size, size);
     heap_free(&max_heap);
     env_rwlock_write_lock(&latency_vec_lock);
     log_tail = 0;
@@ -625,6 +627,7 @@ monitor_tune_load_admit_tail_latency(int base_miss_ratio, ocf_core_t core)
              * If detected workload change, quit and re-optimize.
              */
             int miss_ratio = _get_miss_ratio(core);
+            // printk(KERN_DEBUG "MONITOR: tail latency(la1): %llu, tail latency(la2): %llu, tail latency(la3): %llu", tla1, tla2, tla3);
             if (miss_ratio > MISS_RATIO_TUNING_BOUND
                 || miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD
                 || miss_ratio < base_miss_ratio - WORKLOAD_CHANGE_THRESHOLD) {
@@ -842,7 +845,6 @@ ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode)
     } else {
         if (log_tail == -1)
             env_rwlock_init(&latency_vec_lock);
-        // env_atomic_inc(&log_tail);
         env_rwlock_write_lock(&latency_vec_lock);
         log_tail = 0;
         env_rwlock_write_unlock(&latency_vec_lock);
@@ -864,20 +866,12 @@ ocf_mngt_mf_monitor_stop(void)
         
         env_rwlock_write_lock(&latency_vec_lock);
         if (log_tail >= 0) {
-            //env_atomic_set(&log_tail, -2);
-            // env_atomic_set(&is_full, 0);
             log_tail = -2;
             is_full = 0;
 
-            // env_rwlock_write_lock(&latency_vec_lock);
             kfree(latency_vec);
-            // env_rwlock_write_unlock(&latency_vec_lock);
-            // env_rwlock_destroy(&latency_vec_lock);
         }
         env_rwlock_write_unlock(&latency_vec_lock);
-
-
-        // flex_array_free(latency_vec);
     }
 }
 
@@ -885,7 +879,6 @@ ocf_mngt_mf_monitor_stop(void)
 void ocf_mngt_mf_monitor_report_latency(uint64_t latency) {
     int pos = 0; 
 
-    
     env_rwlock_write_lock(&latency_vec_lock);
     if (log_tail < 0) {
         env_rwlock_write_unlock(&latency_vec_lock);
@@ -899,8 +892,6 @@ void ocf_mngt_mf_monitor_report_latency(uint64_t latency) {
     log_tail ++;
     latency_vec[pos] = latency;
     env_rwlock_write_unlock(&latency_vec_lock);
-
-
 }
 
 
