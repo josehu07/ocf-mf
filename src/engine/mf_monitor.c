@@ -207,7 +207,7 @@ _get_miss_ratio(ocf_core_t core)
     struct ocf_counters_req *curr;
     uint64_t misses = 0, total = 0;
     uint32_t i;
-    int miss_ratio = -1;
+    int miss_ratio = 10000;
 
     for (i = 0; i != OCF_IO_CLASS_MAX; ++i) {
         curr = &core->counters->part_counters[i].read_reqs;
@@ -219,7 +219,7 @@ _get_miss_ratio(ocf_core_t core)
     }
 
     if (total <= 0)
-        return -1;
+        return 10000;
 
     miss_ratio = (misses * 10000) / total;
 
@@ -372,8 +372,9 @@ static uint64_t _get_tail_latency(int percentage) {
     struct ptr_heap max_heap;
     size_t heap_size = 0;
     uint64_t avg_tail_latency = 0, tmp = 0, avg_latency = 0;
+    // int rand;
     if (percentage > 100 || percentage < 0)
-        return ULONG_MAX;
+    return ULONG_MAX;
 
     env_rwlock_read_lock(&latency_vec_lock);
     start = log_tail;
@@ -398,10 +399,14 @@ static uint64_t _get_tail_latency(int percentage) {
         // env_rwlock_read_lock(&latency_vec_lock);
         tmp = latency_vec[start];
         // env_rwlock_read_unlock(&latency_vec_lock);
-        avg_latency += tmp;
-        heap_insert(&max_heap, tmp);
         if (start <= 0) start = MAX_LOG_SIZE;
         else start = (start - 1) % MAX_LOG_SIZE;
+        // get_random_bytes(&rand, sizeof(int));
+        // // Only sample 90% of the dataset
+        // if (rand % 100 < 10)
+        //     continue;
+        avg_latency += tmp;
+        heap_insert(&max_heap, tmp);
     }
     i = 0;
 
@@ -409,10 +414,10 @@ static uint64_t _get_tail_latency(int percentage) {
         avg_tail_latency += max_heap.ptrs[i];
     }
     avg_tail_latency = avg_tail_latency / max_heap.size;
-    // printk(KERN_DEBUG "[_get_tail_latency] Average tail latency:%lld, Average latency:%lld, Number of requests:%d\n", avg_tail_latency, avg_latency / size, size);
+    printk(KERN_DEBUG "[_get_tail_latency] Average tail latency:%lld, Average latency:%lld, Number of requests:%d\n", avg_tail_latency, avg_latency / size, size);
     heap_free(&max_heap);
     env_rwlock_write_lock(&latency_vec_lock);
-    log_tail = -1;
+    log_tail = 0;
     is_full = 0;
     env_rwlock_write_unlock(&latency_vec_lock);
     return avg_tail_latency;
@@ -425,7 +430,7 @@ static uint64_t _get_tail_latency(int percentage) {
 static int
 monitor_wait_stable(ocf_core_t core)
 {
-    int last_miss_ratio = -1;
+    int last_miss_ratio =  10000;
     int miss_ratio = _get_miss_ratio(core);
 
     while (miss_ratio > MISS_RATIO_TUNING_BOUND
@@ -453,7 +458,7 @@ uint64_t monitor_measure_tail_latency(int load_admit) {
     monitor_set_load_admit(load_admit);
     usleep_range(MEASURE_THROUGHPUT_INTERVAL_US,
                  MEASURE_THROUGHPUT_INTERVAL_US + 1);
-    return _get_tail_latency(99); 
+    return _get_tail_latency(95); 
 }
 
 /**
@@ -481,7 +486,7 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
                    iteration, la2);
         }
         tp2 = monitor_measure_throughput(la2);
-        _get_tail_latency(99);
+
 
         /** Get higher ratio throughput. */
         la3 = la2 + LOAD_ADMIT_TUNING_STEP;
@@ -826,7 +831,7 @@ ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode)
     if (monitor_thread_st == NULL)
         return MF_MONITOR_START_ERR_THREAD_RUN;
 
-    printk(KERN_DEBUG "MONITOR: Thread %d started running with tuning mode:%s\n",
+    printk(KERN_DEBUG "MONITOR: Thread %d started running with tuning mode: %s\n",
            monitor_thread_st->pid, tuning_mode_to_str[(int) tuning_mode]);
 
 
@@ -842,8 +847,6 @@ ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode)
         log_tail = 0;
         env_rwlock_write_unlock(&latency_vec_lock);
     }
-    // flex_array_alloc(sizeof(uint64_t), MAX_LOG_SIZE, GFP_KERNEL);
-    // flex_array_prealloc(latency_vec, 0, MAX_LOG_SIZE - 1, GFP_KERNEL);
     return 0;
 }
 
@@ -882,14 +885,6 @@ ocf_mngt_mf_monitor_stop(void)
 void ocf_mngt_mf_monitor_report_latency(uint64_t latency) {
     int pos = 0; 
 
-
-
-    int rand;
-    get_random_bytes(&rand, sizeof(int));
-
-    // Only sample 80% of the dataset
-    if (rand % 100 < 20)
-        return;
     
     env_rwlock_write_lock(&latency_vec_lock);
     if (log_tail < 0) {
@@ -901,8 +896,8 @@ void ocf_mngt_mf_monitor_report_latency(uint64_t latency) {
         log_tail %= MAX_LOG_SIZE;
     }
     pos = log_tail;
-    latency_vec[pos] = latency;
     log_tail ++;
+    latency_vec[pos] = latency;
     env_rwlock_write_unlock(&latency_vec_lock);
 
 
