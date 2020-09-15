@@ -105,13 +105,9 @@ static struct file *
 file_open(const char *path, int flags, int rights)
 {
     struct file *filp = NULL;
-    mm_segment_t oldfs;
     int err = 0;
 
-    oldfs = get_fs();
-    set_fs(get_ds());
     filp = filp_open(path, flags, rights);
-    set_fs(oldfs);
 
     if (IS_ERR(filp)) {
         err = PTR_ERR(filp);
@@ -131,15 +127,8 @@ static ssize_t
 file_read(struct file *file, unsigned long long offset, unsigned char *data,
           unsigned int size)
 {
-    mm_segment_t oldfs;
     ssize_t ret;
-
-    oldfs = get_fs();
-    set_fs(get_ds());
-
-    ret = vfs_read(file, data, size, &offset);
-
-    set_fs(oldfs);
+    ret = kernel_read(file, data, size, &offset);
     return ret;
 }
 
@@ -147,18 +136,18 @@ file_read(struct file *file, unsigned long long offset, unsigned char *data,
 /**
  * Kernel timing utility.
  */
-static struct timeval boot_tv;
+static struct timespec64 boot_tv;
 
 static int64_t
 _get_cur_time_ms(void)
 {
-    struct timeval cur_tv;
+    struct timespec64 cur_tv;
     int64_t cur_time_ms;
 
-    do_gettimeofday(&cur_tv);
+    ktime_get_real_ts64(&cur_tv);
 
     cur_time_ms = (cur_tv.tv_sec - boot_tv.tv_sec) * 1000
-                  + (cur_tv.tv_usec - boot_tv.tv_usec) / 1000;
+                  + (cur_tv.tv_nsec - boot_tv.tv_nsec) / 1000000;
 
     return cur_time_ms;
 }
@@ -811,7 +800,7 @@ ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode)
     env_rwlock_init(&load_admit_lock);
 
 
-    do_gettimeofday(&boot_tv);
+    ktime_get_real_ts64(&boot_tv);
 
     /** Open block device stat files. */
     cache_stat = file_open(CACHE_STAT_FILENAME, O_RDONLY, 0);
@@ -879,11 +868,11 @@ ocf_mngt_mf_monitor_stop(void)
 void ocf_mngt_mf_monitor_report_latency(uint64_t latency) {
     int pos = 0; 
 
-    env_rwlock_write_lock(&latency_vec_lock);
     if (log_tail < 0) {
         env_rwlock_write_unlock(&latency_vec_lock);
         return;
     }
+    env_rwlock_write_lock(&latency_vec_lock);
     if (log_tail >= MAX_LOG_SIZE) {
         is_full = 1;
         log_tail %= MAX_LOG_SIZE;
