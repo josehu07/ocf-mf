@@ -1015,7 +1015,6 @@ void ocf_mngt_mf_monitor_report_latency(uint64_t latency) {
     int pos = 0; 
 
     if (log_tail < 0) {
-        env_rwlock_write_unlock(&latency_vec_lock);
         return;
     }
     env_rwlock_write_lock(&latency_vec_lock);
