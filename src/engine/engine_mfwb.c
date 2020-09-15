@@ -49,7 +49,7 @@ static inline bool load_admit_allow(void)
     unsigned prob;
 
     get_random_bytes(&rand, sizeof(int));
-    prob = ((unsigned) (rand % 10000)) % 10000;
+    prob = ((unsigned) (rand % 100)) % 100 * 100;
 
     return prob <= load_admit;
 }
@@ -245,6 +245,7 @@ static int _ocf_read_mfwb_do(struct ocf_request *req)
         /** Hit && there is dirty line, MUST read from cache. */
         if (req->info.dirty_any) {
             OCF_DEBUG_RQ(req, "Submit");
+            //printk(KERN_ALERT "MONITOR: a read cannot bypass because dirty");
             _ocf_read_mfwb_submit_to_cache(req);
 
         /** Hit && p <= load_admit. */
@@ -255,6 +256,7 @@ static int _ocf_read_mfwb_do(struct ocf_request *req)
         /** Hit && p > load_admit. */
         } else {
             OCF_DEBUG_RQ(req, "Submit");
+            //printk(KERN_ALERT "MONITOR: a read is really bypassed");
             _ocf_read_mfwb_submit_to_core(req, false);
         }
 

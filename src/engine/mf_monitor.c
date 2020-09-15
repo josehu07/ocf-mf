@@ -104,6 +104,19 @@ monitor_query_load_admit(void)
 static struct file *
 file_open(const char *path, int flags, int rights)
 {
+    /*struct file *filp = NULL;
+    mm_segment_t oldfs;
+    int err = 0;
+
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
+    filp = filp_open(path, flags, rights);
+
+    if (IS_ERR(filp)) {
+        err = PTR_ERR(filp);
+        return NULL;
+    }*/
+    
     struct file *filp = NULL;
     int err = 0;
 
@@ -111,8 +124,12 @@ file_open(const char *path, int flags, int rights)
 
     if (IS_ERR(filp)) {
         err = PTR_ERR(filp);
+        printk(KERN_ALERT "Kan: fail to opened a file");
         return NULL;
     }
+            
+    
+    printk(KERN_ALERT "Kan: opened a file");
 
     return filp;
 }
@@ -127,6 +144,17 @@ static ssize_t
 file_read(struct file *file, unsigned long long offset, unsigned char *data,
           unsigned int size)
 {
+    /*mm_segment_t oldfs;
+    ssize_t ret;
+
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
+
+    ret = vfs_read(file, data, size, &offset);
+
+    set_fs(oldfs);
+    */
+    
     ssize_t ret;
     ret = kernel_read(file, data, size, &offset);
     return ret;
@@ -154,38 +182,42 @@ _get_cur_time_ms(void)
 
 
 /** For block device throughput measurement. */
-static const char *CACHE_STAT_FILENAME = "/sys/block/sdc/stat";
-static const char *CORE_STAT_FILENAME  = "/sys/block/sdb/stat";
+//static bool measure_latency = false;
+static const char *CACHE_STAT_FILENAME = "/sys/block/nvme1n1/stat";
+static const char *CORE_STAT_FILENAME  = "/sys/block/nvme0n1/stat";
+static const char *CAS_STAT_FILENAME = "/sys/block/cas1-1/stat";
 
 static struct file *cache_stat;
 static struct file *core_stat;
+static struct file *cas_stat;
 
 static char cache_stat_buf[1024];
 static char core_stat_buf[1024];
+static char cas_stat_buf[1024];
 
 
 /*========== Multi-factor algorithm logic BEGIN ==========*/
 
 /** Do not attempt tuning when miss ratio is higher than X. */
-static const int MISS_RATIO_TUNING_BOUND = 2000;    // 20%.
+static const int MISS_RATIO_TUNING_BOUND = 3000;    // 30%.
 
 /** Consider cache is stable if miss ratio within OLD_RATIO +- X. */
-static const int WAIT_STABLE_THRESHOLD = 1;         // 0.01%.
+static const int WAIT_STABLE_THRESHOLD = 10;         // 0.10%.
 
 /** Sleep X microseconds when detecting cache stability. */
-static const int WAIT_STABLE_SLEEP_INTERVAL_US = 1000000;
+static const int WAIT_STABLE_SLEEP_INTERVAL_US = 100000; //0.1s
 
 /** Consider workload change when miss ratio > BASE_RATIO + X. */
-static const int WORKLOAD_CHANGE_THRESHOLD = 2000;  // 20%.
+static const int WORKLOAD_CHANGE_THRESHOLD = 5000;  // 50%.
 
 /** `load_admit` tuning step size. */
 static const int LOAD_ADMIT_TUNING_STEP = 100;      // 1%.
 
 /** Measure throughput for a `load_admit` value for X microseconds. */
-static const int MEASURE_THROUGHPUT_INTERVAL_US =   25000;
+static const int MEASURE_THROUGHPUT_INTERVAL_US = 50000;
 
 /** How many chances given to not quit on `load_admit` 100%. */
-static const int NOT_QUIT_ON_100_CHANCES = 1;
+static const int NOT_QUIT_ON_100_CHANCES = 2;
 
 /**
  * Query the stat component for read (partial + full) miss ratio info.
@@ -205,11 +237,21 @@ _get_miss_ratio(ocf_core_t core)
         misses += env_atomic64_read(&curr->full_miss);
 
         total += env_atomic64_read(&curr->total);
+
+
+	// set to zero
+	env_atomic64_set(&curr->total, 0); 
+	env_atomic64_set(&curr->partial_miss, 0); 
+	env_atomic64_set(&curr->full_miss, 0); 
     }
 
-    if (total <= 0)
-        return 10000;
+    if (total < 0)
+        return -1;
 
+    if (total == 0)
+        return 10000;
+	    
+	    
     miss_ratio = (misses * 10000) / total;
 
     return miss_ratio;
@@ -233,13 +275,23 @@ monitor_measure_throughput(int load_admit)
             cache_read_sectors_new = 0, cache_write_sectors_new = 0,
             core_read_sectors_old  = 0, core_write_sectors_old  = 0,
             core_read_sectors_new  = 0, core_write_sectors_new  = 0;
+    
     int64_t old_time_ms = 0, new_time_ms = 0;
     int64_t throughput = 0;
+    int64_t latency = 0;
+    
+    int64_t cas_read_sectors_old = 0, cas_write_sectors_old = 0,
+            cas_read_sectors_new = 0, cas_write_sectors_new = 0,
+            cas_read_requests_old = 0, cas_read_ticks_old = 0,
+	    cas_read_requests_new = 0, cas_read_ticks_new = 0;
 
+    
     char *cache_stat_tmp, *core_stat_tmp;
     char *cache_counter, *core_counter;
-    int count;
 
+    char *cas_stat_tmp, *cas_counter;
+    int count;
+    
     /** Record old counters. */
     ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
     ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
@@ -286,12 +338,44 @@ monitor_measure_throughput(int load_admit)
             kstrtoll(core_counter, 10, &core_write_sectors_old);
     }
 
+    
+    ENV_BUG_ON(file_read(cas_stat,  0, cas_stat_buf,  1024) <= 0);
+
+    old_time_ms = _get_cur_time_ms();
+
+    cas_stat_tmp = cas_stat_buf;
+    while (*cas_stat_tmp == ' ')
+        cas_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        cas_counter = cas_stat_tmp;
+
+        while (*cas_stat_tmp != ' ' && *cas_stat_tmp != '\0')
+            cas_stat_tmp++;
+        if (*cas_stat_tmp == '\0')
+            break;
+        *(cas_stat_tmp++) = '\0';
+        while (*cas_stat_tmp == ' ')
+            cas_stat_tmp++;
+
+        if (count == 2)
+            kstrtoll(cas_counter, 10, &cas_read_sectors_old);
+        else if (count == 6)
+            kstrtoll(cas_counter, 10, &cas_write_sectors_old);
+	else if (count == 0)
+            kstrtoll(cas_counter, 10, &cas_read_requests_old);
+	else if (count == 3)
+            kstrtoll(cas_counter, 10, &cas_read_ticks_old);
+    }
+    
+    //printk("=== MONITOR: Measured throughput: old cas time: %lld, old cas read sectors: %lld, old cas read ticks: %lld, old cas read requests: %lld, old cas write sectors: %lld, old cache write sectors: %lld", old_time_ms, cas_read_sectors_old, cas_read_ticks_old, cas_read_requests_old, cas_write_sectors_old, cache_write_sectors_old);
+
     /** Set `load_admit` and sleep for some time. */
     monitor_set_load_admit(load_admit);
     usleep_range(MEASURE_THROUGHPUT_INTERVAL_US,
                  MEASURE_THROUGHPUT_INTERVAL_US + 1);
 
     /** Get new counters and calculate the throughputs. */
+    ///*
     ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
     ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
 
@@ -336,9 +420,39 @@ monitor_measure_throughput(int load_admit)
         else if (count == 6)
             kstrtoll(core_counter, 10, &core_write_sectors_new);
     }
+    //*/
+    
+    ENV_BUG_ON(file_read(cas_stat,  0, cas_stat_buf,  1024) <= 0);
+    new_time_ms = _get_cur_time_ms();
+    
+    cas_stat_tmp = cas_stat_buf;
+    while (*cas_stat_tmp == ' ')
+        cas_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        cas_counter = cas_stat_tmp;
+
+        while (*cas_stat_tmp != ' ' && *cas_stat_tmp != '\0')
+            cas_stat_tmp++;
+        if (*cas_stat_tmp == '\0')
+            break;
+        *(cas_stat_tmp++) = '\0';
+        while (*cas_stat_tmp == ' ')
+            cas_stat_tmp++;
+
+        if (count == 2)
+            kstrtoll(cas_counter, 10, &cas_read_sectors_new);
+        else if (count == 6)
+            kstrtoll(cas_counter, 10, &cas_write_sectors_new);
+	else if (count == 0)
+            kstrtoll(cas_counter, 10, &cas_read_requests_new);
+	else if (count == 3)
+            kstrtoll(cas_counter, 10, &cas_read_ticks_new);
+    }
+    
+    //printk("MONITOR: Measured throughput: new cas time: %lld, new cas read sectors: %lld, new cas read ticks: %lld, new cas read requests: %lld, new cas write sectors: %lld, new cache write sectors: %lld", new_time_ms, cas_read_sectors_new, cas_read_ticks_new, cas_read_requests_new, cas_write_sectors_new, cache_write_sectors_new);
 
     if (new_time_ms > old_time_ms) {
-        throughput += (int64_t) (500
+        /*throughput += (int64_t) (500
                       * ((cache_read_sectors_new - cache_read_sectors_old)
                       + (cache_write_sectors_new - cache_write_sectors_old)))
                       / (new_time_ms  - old_time_ms);
@@ -346,8 +460,17 @@ monitor_measure_throughput(int load_admit)
                       * ((core_read_sectors_new - core_read_sectors_old)
                       + (core_write_sectors_new - core_write_sectors_old)))
                       / (new_time_ms  - old_time_ms);
+        */
+        throughput += (int64_t) (500
+                      * (cas_read_sectors_new - cas_read_sectors_old))
+                      / (new_time_ms  - old_time_ms);
+        if (cas_read_requests_new != cas_read_requests_old) {
+	    latency += (int64_t) (1000 
+		       * (cas_read_ticks_new - cas_read_ticks_old)) 
+		       / (cas_read_requests_new - cas_read_requests_old);
+	}
     }
-
+    printk("MONITOR: Measured throughput: %lld, latency %lld us, for load admit %d", throughput, latency, load_admit);
     return throughput;
 }
 
@@ -421,7 +544,7 @@ static uint64_t _get_tail_latency(int percentage) {
 static int
 monitor_wait_stable(ocf_core_t core)
 {
-    int last_miss_ratio =  10000;
+    int last_miss_ratio = 10000;
     int miss_ratio = _get_miss_ratio(core);
 
     while (miss_ratio > MISS_RATIO_TUNING_BOUND
@@ -468,8 +591,8 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
         if (kthread_should_stop())
             return;
 
-        iteration++;
-
+	iteration++;
+        
         /** Get middle ratio (current `load_admit`) throughput. */
         la2 = monitor_query_load_admit();
         if (MONITOR_VERBOSE_LOG && iteration % 100 == 1) {
@@ -477,6 +600,7 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
                    iteration, la2);
         }
         tp2 = monitor_measure_throughput(la2);
+        
 
 
         /** Get higher ratio throughput. */
@@ -496,14 +620,19 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
              * If detected workload change, quit and re-optimize.
              */
             int miss_ratio = _get_miss_ratio(core);
-            if (miss_ratio > MISS_RATIO_TUNING_BOUND
-                || miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD
+
+            if (miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD
                 || miss_ratio < base_miss_ratio - WORKLOAD_CHANGE_THRESHOLD) {
                 if (MONITOR_VERBOSE_LOG) {
-                    printk(KERN_DEBUG "MONITOR: (tune) miss ratio changed too"
-                                      " far, quit\n");
+                    printk(KERN_ALERT "MONITOR: (tune) miss ratio changed too"
+                                      " far(%d -> %d, %d), quit\n", base_miss_ratio, miss_ratio, WORKLOAD_CHANGE_THRESHOLD);
                 }
                 return;
+            }
+	
+	    if (MONITOR_VERBOSE_LOG) {
+                printk(KERN_ALERT "MONITOR: (tune), la2 = %-5d, tp1 = %lld, tp2 = %lld, tp3 = %lld \n",
+                       la2, tp1, tp2, tp3);
             }
 
             if (kthread_should_stop())
@@ -742,6 +871,7 @@ monitor_func(void *args_ptr)
 
             file_close(cache_stat);
             file_close(core_stat);
+            file_close(cas_stat);
 
             break;
         }
@@ -749,8 +879,11 @@ monitor_func(void *args_ptr)
         /** Start a new workload with classic caching. */
         if (MONITOR_VERBOSE_LOG)
             printk(KERN_ALERT "MONITOR: (fall) start classic caching\n");
-        monitor_set_data_admit(true);
+	monitor_set_data_admit(true);
+        //monitor_set_data_admit(false);
         monitor_set_load_admit(10000);
+        //monitor_set_load_admit(5000);
+	//continue;
 
         /** Wait until cache is stable. */
         base_miss_ratio = monitor_wait_stable(core);
@@ -763,6 +896,7 @@ monitor_func(void *args_ptr)
 
             file_close(cache_stat);
             file_close(core_stat);
+            file_close(cas_stat);
 
             break;
         }
@@ -792,6 +926,8 @@ ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode)
     struct args *arg; 
     if (monitor_thread_st != NULL)  // Already started.
         return 0;
+    
+    printk(KERN_ALERT "MONITOR(Kan): to start a monitor thread\n");
 
     global_data_admit = true;
     global_load_admit = 10000;
@@ -803,6 +939,8 @@ ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode)
     ktime_get_real_ts64(&boot_tv);
 
     /** Open block device stat files. */
+    
+    ///*
     cache_stat = file_open(CACHE_STAT_FILENAME, O_RDONLY, 0);
     if (cache_stat < 0) {
         OCF_DEBUG_LOG(ocf_core_get_cache(core), "Unable to open cache stat");
@@ -814,9 +952,17 @@ ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode)
         OCF_DEBUG_LOG(ocf_core_get_cache(core), "Unable to open core stat");
         return MF_MONITOR_START_ERR_CORE_STAT;
     }
+        //*/
+    cas_stat = file_open(CAS_STAT_FILENAME, O_RDONLY, 0);
+    if (cas_stat < 0) {
+        printk(KERN_ALERT "MONITOR: Cannot open cas stat");
+        OCF_DEBUG_LOG(ocf_core_get_cache(core), "Unable to open core stat");
+        return MF_MONITOR_START_ERR_CORE_STAT;
+    }
     arg = (struct args*)kmalloc(sizeof(struct args), GFP_KERNEL);
     arg -> core = core;
     arg -> tuning_mode = tuning_mode;
+
     /** Create the monitor thread. */
     monitor_thread_st = kthread_run(monitor_func, (void *) arg,
                                     "mf_monitor_thread");
