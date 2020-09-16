@@ -173,7 +173,7 @@ _get_cur_time_ms(void)
 
 
 /** For block device throughput measurement. */
-//static bool measure_latency = false;
+static bool measure_latency = true;
 static const char *CACHE_STAT_FILENAME = "/sys/block/nvme1n1/stat";
 static const char *CORE_STAT_FILENAME  = "/sys/block/nvme0n1/stat";
 static const char *CAS_STAT_FILENAME = "/sys/block/cas1-1/stat";
@@ -462,6 +462,10 @@ monitor_measure_throughput(int load_admit)
 	}
     }
     printk("MONITOR: Measured throughput: %lld, latency %lld us, for load admit %d", throughput, latency, load_admit);
+    
+    if (measure_latency)
+        return 10000000 - latency; // transform max to min
+
     return throughput;
 }
 
@@ -687,6 +691,7 @@ static struct task_struct *monitor_thread_st = NULL;
  * Setup multi-factor switches and sart the monitor thread.
  */
 int
+//ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode)
 ocf_mngt_mf_monitor_start(ocf_core_t core)
 {
     if (monitor_thread_st != NULL)  // Already started.
