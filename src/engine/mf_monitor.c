@@ -22,7 +22,7 @@
 #include "../utils/utils_prio_heap.h"
 #include "../ocf_core_priv.h"
 #include "mf_monitor.h"
-#define MAX_LOG_SIZE 48000
+#define MAX_LOG_SIZE 480000
 
 /** Enable kernel verbose logging? */
 static const bool MONITOR_VERBOSE_LOG = true;
@@ -572,7 +572,84 @@ uint64_t monitor_measure_tail_latency(int load_admit) {
     monitor_set_load_admit(load_admit);
     usleep_range(MEASURE_THROUGHPUT_INTERVAL_US,
                  MEASURE_THROUGHPUT_INTERVAL_US + 1);
-    return _get_tail_latency(95); 
+    //return _get_tail_latency(95); 
+    return _get_tail_latency(90); 
+    //return _get_tail_latency(99); 
+}
+
+
+uint64_t monitor_measure_avg_latency(int load_admit) {
+    int64_t cas_read_requests_old = 0, cas_read_ticks_old = 0,
+	    cas_read_requests_new = 0, cas_read_ticks_new = 0;
+    int64_t old_time_ms = 0, new_time_ms = 0;
+    int64_t latency = 0;
+    
+    char *cas_stat_tmp, *cas_counter;
+    int count;
+
+    old_time_ms = _get_cur_time_ms();
+    ENV_BUG_ON(file_read(cas_stat,  0, cas_stat_buf,  1024) <= 0);
+
+    old_time_ms = _get_cur_time_ms();
+
+    cas_stat_tmp = cas_stat_buf;
+    while (*cas_stat_tmp == ' ')
+        cas_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        cas_counter = cas_stat_tmp;
+
+        while (*cas_stat_tmp != ' ' && *cas_stat_tmp != '\0')
+            cas_stat_tmp++;
+        if (*cas_stat_tmp == '\0')
+            break;
+        *(cas_stat_tmp++) = '\0';
+        while (*cas_stat_tmp == ' ')
+            cas_stat_tmp++;
+
+	if (count == 0)
+            kstrtoll(cas_counter, 10, &cas_read_requests_old);
+	else if (count == 3)
+            kstrtoll(cas_counter, 10, &cas_read_ticks_old);
+    }
+    
+
+    /** Set `load_admit` and sleep for some time. */
+    monitor_set_load_admit(load_admit);
+    usleep_range(MEASURE_THROUGHPUT_INTERVAL_US,
+                 MEASURE_THROUGHPUT_INTERVAL_US + 1);
+
+
+    ENV_BUG_ON(file_read(cas_stat,  0, cas_stat_buf,  1024) <= 0);
+    new_time_ms = _get_cur_time_ms();
+    
+    cas_stat_tmp = cas_stat_buf;
+    while (*cas_stat_tmp == ' ')
+        cas_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        cas_counter = cas_stat_tmp;
+
+        while (*cas_stat_tmp != ' ' && *cas_stat_tmp != '\0')
+            cas_stat_tmp++;
+        if (*cas_stat_tmp == '\0')
+            break;
+        *(cas_stat_tmp++) = '\0';
+        while (*cas_stat_tmp == ' ')
+            cas_stat_tmp++;
+
+	if (count == 0)
+            kstrtoll(cas_counter, 10, &cas_read_requests_new);
+	else if (count == 3)
+            kstrtoll(cas_counter, 10, &cas_read_ticks_new);
+    }
+
+    if (new_time_ms > old_time_ms) {
+        if (cas_read_requests_new != cas_read_requests_old) 
+	    latency += (int64_t) (1000 * (cas_read_ticks_new - cas_read_ticks_old)) / (cas_read_requests_new - cas_read_requests_old);
+        else return ULONG_MAX;
+    }
+
+
+    return latency;
 }
 
 /**
@@ -580,7 +657,7 @@ uint64_t monitor_measure_tail_latency(int load_admit) {
  * considered happened.
  */
 static void
-monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
+monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core, int mode)
 {
     int la1, la2, la3;
     int64_t tp1, tp2, tp3;
@@ -702,12 +779,18 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
 }
 
 
+uint64_t (*measure_latency_func[3]) (int load_admit) = 
+{
+    [0] monitor_measure_avg_latency,
+    [(int)ocf_mf_tail_la] monitor_measure_tail_latency,
+    [(int)ocf_mf_avg_la] monitor_measure_avg_latency,
+};
 /**
  * Repeatedly tune `load_admit` ratio until a workload change is
  * considered happened.
  */
 static void
-monitor_tune_load_admit_tail_latency(int base_miss_ratio, ocf_core_t core)
+monitor_tune_load_admit_latency(int base_miss_ratio, ocf_core_t core, int mode)
 {
     int la1, la2, la3;
     uint64_t tla1, tla2, tla3;
@@ -726,15 +809,15 @@ monitor_tune_load_admit_tail_latency(int base_miss_ratio, ocf_core_t core)
             printk(KERN_ALERT "MONITOR: (tune) iter #%lld: load_admit = %-5d\n",
                    iteration, la2);
         }
-        tla2 = monitor_measure_tail_latency(la2);
+        tla2 = measure_latency_func[mode](la2);
 
         /** Get higher ratio throughput. */
         la3 = la2 + LOAD_ADMIT_TUNING_STEP;
-        tla3 = la3 > 10000 ? ULONG_MAX : monitor_measure_tail_latency(la3);
+        tla3 = la3 > 10000 ? ULONG_MAX : measure_latency_func[mode](la3);
 
         /** Get lower ratio throughput. */
         la1 = la2 - LOAD_ADMIT_TUNING_STEP;
-        tla1 = la1 < 0     ? ULONG_MAX : monitor_measure_tail_latency(la1);
+        tla1 = la1 < 0     ? ULONG_MAX : measure_latency_func[mode](la1);
 
         monitor_set_load_admit(la2);    /** Recover. */
 
@@ -758,6 +841,12 @@ monitor_tune_load_admit_tail_latency(int base_miss_ratio, ocf_core_t core)
 
             if (kthread_should_stop())
                 return;
+	    
+	    
+	    if (MONITOR_VERBOSE_LOG) {
+                printk(KERN_ALERT "MONITOR: (tune), la2 = %-5d, tp1 = %lld, tp2 = %lld, tp3 = %lld \n",
+                       la2, tla1, tla2, tla3);
+            }
 
             /**
              * Middle ratio yields best throughput, goto intensity check.
@@ -779,7 +868,7 @@ monitor_tune_load_admit_tail_latency(int base_miss_ratio, ocf_core_t core)
                     la1 = la2; tla1 = tla2;
                     la2 = la3; tla2 = tla3;
                     la3 = la3 + LOAD_ADMIT_TUNING_STEP;
-                    tla3 = la3 > 10000 ? ULONG_MAX : monitor_measure_tail_latency(la3);
+                    tla3 = la3 > 10000 ? ULONG_MAX : measure_latency_func[mode](la3);
                     continue;
                 }
             }
@@ -796,7 +885,7 @@ monitor_tune_load_admit_tail_latency(int base_miss_ratio, ocf_core_t core)
                     la3 = la2; tla3 = tla2;
                     la2 = la1; tla2 = tla1;
                     la1 = la1 - LOAD_ADMIT_TUNING_STEP;
-                    tla1 = la1 < 0     ? ULONG_MAX : monitor_measure_tail_latency(la1);
+                    tla1 = la1 < 0     ? ULONG_MAX : measure_latency_func[mode](la1);
                     continue;
                 }
             }
@@ -823,23 +912,17 @@ monitor_tune_load_admit_tail_latency(int base_miss_ratio, ocf_core_t core)
 }
 
 
-static void
-monitor_tune_load_admit_avg_latency(int base_miss_ratio, ocf_core_t core)
-{
-    // TODO: Place hold of the average latency
-    return;
-}
 
 struct args {
     ocf_core_t core;
     ocf_tuning_mode_t tuning_mode;
 };
 
-static void (*tune_func[3])(int, ocf_core_t) = 
+static void (*tune_func[3])(int, ocf_core_t, int) = 
 {
     [(int)ocf_mf_tp]monitor_tune_load_admit,
-    [(int)ocf_mf_tail_la]monitor_tune_load_admit_tail_latency,
-    [(int)ocf_mf_avg_la]monitor_tune_load_admit_avg_latency,
+    [(int)ocf_mf_tail_la]monitor_tune_load_admit_latency,
+    [(int)ocf_mf_avg_la]monitor_tune_load_admit_latency,
 };
 
 static char *tuning_mode_to_str[] =
@@ -858,6 +941,7 @@ static int
 monitor_func(void *args_ptr)
 {
 
+    
     ocf_core_t core = ((struct args*)args_ptr) -> core;
     ocf_tuning_mode_t tuning_mode = ((struct args*)args_ptr) -> tuning_mode;
     kfree(args_ptr);
@@ -907,7 +991,7 @@ monitor_func(void *args_ptr)
             printk(KERN_DEBUG "MONITOR: (tune) turn off data_admit & start "
                               "tuning\n");
         }
-        tune_func[(int)tuning_mode](base_miss_ratio, core);
+        tune_func[(int)tuning_mode](base_miss_ratio, core, (int)tuning_mode);
     }
 
     return 0;
@@ -1020,7 +1104,7 @@ void ocf_mngt_mf_monitor_report_latency(uint64_t latency) {
     env_rwlock_write_lock(&latency_vec_lock);
     if (log_tail >= MAX_LOG_SIZE) {
         is_full = 1;
-        log_tail %= MAX_LOG_SIZE;
+        log_tail = 0;
     }
     pos = log_tail;
     log_tail ++;
