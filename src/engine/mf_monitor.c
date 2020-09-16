@@ -782,6 +782,110 @@ monitor_func(void *args_ptr)
     return 0;
 }
 
+/*========== SIB LOGIC START ==========*/
+static int64_t bandwidth_mean = 0;
+static int64_t bandwidth_va = 0;
+static int64_t minimum_la = 0;
+static uint64_t num_elements = 0;
+
+
+static int64_t
+get_z_score(int64_t bandwidth) {
+    return (bandwidth - bandwidth_mean) / int_sqrt(bandwidth_va);
+}
+/**
+ * Monitor thread logic.
+ */
+static int
+sib_monitor_without_window_func(void *args_ptr)
+{
+    int64_t last_tp = -1, tp = -1, lat = -1, load_admit;
+    int8_t tendency_flag = 0;
+    monitor_set_data_admit(false);
+    while (1) {
+        // Phase 1: Exploration: starting from load admit equals to 10000 and periodly tries to decrease the load admit
+        while (1) {
+            monitor_set_load_admit(10000);
+
+            if (kthread_should_stop()) {
+                env_rwlock_destroy(&data_admit_lock);
+                env_rwlock_destroy(&load_admit_lock);
+
+                file_close(cache_stat);
+                file_close(core_stat);
+                file_close(cas_stat);
+                return;
+            }
+
+            // Increase the bypass level and see what's happening
+            monitor_measure_throughput_latency(9500, tp, lat);
+            if (last_tp != -1 && tp > last_tp) {
+                bandwidth_mean = tp;
+                bandwidth_va = 0;
+                minimum_la = lat;
+                break;
+            }
+            last_tp = tp;
+        }
+
+        // Phase 2: using the maximum bandwidth to determine whether we need to increase the bypass level
+
+        while (1) {
+            if (kthread_should_stop()) {
+                env_rwlock_destroy(&data_admit_lock);
+                env_rwlock_destroy(&load_admit_lock);
+
+                file_close(cache_stat);
+                file_close(core_stat);
+                return;
+            }
+            load_admit = monitor_query_load_admit();
+            monitor_measure_throughput_latency(load_admit, tp, lat);
+            
+            if (get_z_score(tp) > - 4.0) {
+                num_elements ++;
+                
+                /* Cumulatively calculate the mean and standard deviation */
+                bandwidth_va = (num_elements - 2) * bandwidth_va / (num_elements - 1) + (tp - bandwidth_mean) * (tp - bandwidth_mean) / (num_elements);
+                bandwidth_mean = bandwidth_mean + (tp - bandwidth_mean) / num_elements;
+
+                if (load_admit > minimum_la) {
+                    if (tendency_flag == 1) {
+                        tendency_flag = 0;
+                        // Increase the bypass level
+                        if (la - LOAD_ADMIT_TUNING_STEP >= 0)
+                            monitor_set_load_admit(load_admit - LOAD_ADMIT_TUNING_STEP);
+                        else
+                            monitor_set_load_admit(0);
+                        
+                    } else {
+                        tendency_flag = 1;
+                    }
+                } else {
+                    minimum_la = lat;
+                    tendency_flag = 0;
+                }
+            } else {
+                if (tendency_flag == -1) {
+                    // Break out of second phase since the device is under-saturaded. 
+                    monitor_set_load_admit(10000);
+                    break;
+                } else {
+                    tendency_flag == -1;
+                }
+            }
+        }
+
+        // Reset the parameter to start from the phase 1
+        bandwidth_mean = 0;
+        bandwidth_va = 0;
+        minimum_la = 0;
+        num_elements = 0;
+    }
+    return 0;
+}
+/*========== SIB LOGIC END ==========*/
+
 /*========== Multi-factor algorithm logic END ==========*/
 
 static struct task_struct *monitor_thread_st = NULL;
@@ -882,20 +986,10 @@ ocf_mngt_mf_monitor_stop(void)
 void ocf_mngt_mf_monitor_report_latency(uint64_t latency) {
     int pos = 0; 
 
-
-
-    int rand;
-    get_random_bytes(&rand, sizeof(int));
-
-    // Only sample 80% of the dataset
-    if (rand % 100 < 20)
-        return;
-    
-    env_rwlock_write_lock(&latency_vec_lock);
     if (log_tail < 0) {
-        env_rwlock_write_unlock(&latency_vec_lock);
         return;
     }
+    env_rwlock_write_lock(&latency_vec_lock);
     if (log_tail >= MAX_LOG_SIZE) {
         is_full = 1;
         log_tail %= MAX_LOG_SIZE;
