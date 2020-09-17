@@ -1115,12 +1115,15 @@ void ocf_mngt_core_pool_remove(ocf_ctx_t ctx, ocf_volume_t volume);
 /**
  * Setup multi-factor switches and sart the monitor thread.
  */
-int ocf_mngt_mf_monitor_start(ocf_core_t core);
+int ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode);
 
 /**
  * For the context to gracefully stop the monitor thread.
  */
 void ocf_mngt_mf_monitor_stop(void);
+
+
+void ocf_mngt_mf_monitor_report_latency(uint64_t latency);
 
 /*========== [Orthus FLAG END] ==========*/
 

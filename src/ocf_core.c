@@ -230,7 +230,7 @@ void ocf_core_volume_submit_io(struct ocf_io *io)
 		ocf_io_end(io, ret);
 		return;
 	}
-
+	
 	req = ocf_io_to_req(io);
 	core = ocf_volume_to_core(ocf_io_get_volume(io));
 	cache = ocf_core_get_cache(core);

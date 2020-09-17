@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <asm/segment.h>
 #include <linux/buffer_head.h>
+#include <linux/random.h>
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
@@ -18,9 +19,10 @@
 #include "cache_engine.h"
 #include "engine_debug.h"
 #include "../ocf_stats_priv.h"
+#include "../utils/utils_prio_heap.h"
 #include "../ocf_core_priv.h"
 #include "mf_monitor.h"
-
+#define MAX_LOG_SIZE 48000
 
 /** Enable kernel verbose logging? */
 static const bool MONITOR_VERBOSE_LOG = true;
@@ -37,6 +39,14 @@ static env_rwlock data_admit_lock;
 
 /** Reader-writer lock to protect `load_admit`. */
 static env_rwlock load_admit_lock;
+
+static env_rwlock latency_vec_lock;
+
+static int log_tail = -1;
+
+static int is_full = 0;
+
+static uint64_t *latency_vec = NULL;
 
 
 /**
@@ -210,6 +220,8 @@ static const int MEASURE_THROUGHPUT_INTERVAL_US = 50000;
 /** How many chances given to not quit on `load_admit` 100%. */
 static const int NOT_QUIT_ON_100_CHANCES = 2;
 
+static const int SAMPLE_NUMBER_BOUND = 5;
+
 /**
  * Query the stat component for read (partial + full) miss ratio info.
  */
@@ -286,6 +298,7 @@ monitor_measure_throughput(int load_admit)
     /** Record old counters. */
     ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
     ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
+    ENV_BUG_ON(file_read(cas_stat,  0, cas_stat_buf,  1024) <= 0);
 
     old_time_ms = _get_cur_time_ms();
 
@@ -684,6 +697,281 @@ monitor_measure_throughput_latency(int load_admit, int64_t* tp_ptr, int64_t* la_
     return throughput;
 }
 
+
+/**
+ * Set `load_admit` to a value for a while and measure the throughput
+ * in KiB/s.
+ *
+ * Throughput measured from reading /sys/block/<dev>/stat file.
+ *     - 2nd counter: read sectors  in 512 bytes
+ *     - 6th counter: write sectors in 512 bytes
+ *     - 9th counter: device ticks  in milliseconds
+ *
+ * Returns throughput as an in64_t in KiB/s.
+ */
+static void
+monitor_measure_throughput_latency(int load_admit, int64_t* tp_ptr, int64_t *cache_tp_ptr, int64_t *core_tp_ptr, int64_t* la_ptr)
+{
+    int64_t cache_read_sectors_old = 0, cache_write_sectors_old = 0,
+            cache_read_sectors_new = 0, cache_write_sectors_new = 0,
+            core_read_sectors_old  = 0, core_write_sectors_old  = 0,
+            core_read_sectors_new  = 0, core_write_sectors_new  = 0;
+    
+    int64_t old_time_ms = 0, new_time_ms = 0;
+    int64_t throughput = 0, cache_tp = 0, core_tp = 0;
+    int64_t latency = 0;
+    
+    int64_t cas_read_sectors_old = 0, cas_write_sectors_old = 0,
+            cas_read_sectors_new = 0, cas_write_sectors_new = 0,
+            cas_read_requests_old = 0, cas_read_ticks_old = 0,
+	        cas_read_requests_new = 0, cas_read_ticks_new = 0;
+
+    
+    char *cache_stat_tmp, *core_stat_tmp;
+    char *cache_counter, *core_counter;
+
+    char *cas_stat_tmp, *cas_counter;
+    int count;
+    
+    /** Record old counters. */
+    ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
+    ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
+    ENV_BUG_ON(file_read(cas_stat,  0, cas_stat_buf,  1024) <= 0);
+
+    old_time_ms = _get_cur_time_ms();
+
+    cache_stat_tmp = cache_stat_buf;
+    while (*cache_stat_tmp == ' ')
+        cache_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        cache_counter = cache_stat_tmp;
+
+        while (*cache_stat_tmp != ' ' && *cache_stat_tmp != '\0')
+            cache_stat_tmp++;
+        if (*cache_stat_tmp == '\0')
+            break;
+        *(cache_stat_tmp++) = '\0';
+        while (*cache_stat_tmp == ' ')
+            cache_stat_tmp++;
+
+        if (count == 2)
+            kstrtoll(cache_counter, 10, &cache_read_sectors_old);
+        else if (count == 6)
+            kstrtoll(cache_counter, 10, &cache_write_sectors_old);
+    }
+
+    core_stat_tmp = core_stat_buf;
+    while (*core_stat_tmp == ' ')
+        core_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        core_counter = core_stat_tmp;
+
+        while (*core_stat_tmp != ' ' && *core_stat_tmp != '\0')
+            core_stat_tmp++;
+        if (*core_stat_tmp == '\0')
+            break;
+        *(core_stat_tmp++) = '\0';
+        while (*core_stat_tmp == ' ')
+            core_stat_tmp++;
+
+        if (count == 2)
+            kstrtoll(core_counter, 10, &core_read_sectors_old);
+        else if (count == 6)
+            kstrtoll(core_counter, 10, &core_write_sectors_old);
+    }
+
+    
+
+
+    cas_stat_tmp = cas_stat_buf;
+    while (*cas_stat_tmp == ' ')
+        cas_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        cas_counter = cas_stat_tmp;
+
+        while (*cas_stat_tmp != ' ' && *cas_stat_tmp != '\0')
+            cas_stat_tmp++;
+        if (*cas_stat_tmp == '\0')
+            break;
+        *(cas_stat_tmp++) = '\0';
+        while (*cas_stat_tmp == ' ')
+            cas_stat_tmp++;
+
+        if (count == 2)
+            kstrtoll(cas_counter, 10, &cas_read_sectors_old);
+        else if (count == 6)
+            kstrtoll(cas_counter, 10, &cas_write_sectors_old);
+	    else if (count == 0)
+            kstrtoll(cas_counter, 10, &cas_read_requests_old);
+	    else if (count == 3)
+            kstrtoll(cas_counter, 10, &cas_read_ticks_old);
+    }
+    
+    //printk("=== MONITOR: Measured throughput: old cas time: %lld, old cas read sectors: %lld, old cas read ticks: %lld, old cas read requests: %lld, old cas write sectors: %lld, old cache write sectors: %lld", old_time_ms, cas_read_sectors_old, cas_read_ticks_old, cas_read_requests_old, cas_write_sectors_old, cache_write_sectors_old);
+
+    /** Set `load_admit` and sleep for some time. */
+    monitor_set_load_admit(load_admit);
+    usleep_range(MEASURE_THROUGHPUT_INTERVAL_US,
+                 MEASURE_THROUGHPUT_INTERVAL_US + 1);
+
+    /** Get new counters and calculate the throughputs. */
+    ///*
+    ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
+    ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
+    ENV_BUG_ON(file_read(cas_stat,  0, cas_stat_buf,  1024) <= 0);
+
+    new_time_ms = _get_cur_time_ms();
+
+    cache_stat_tmp = cache_stat_buf;
+    while (*cache_stat_tmp == ' ')
+        cache_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        cache_counter = cache_stat_tmp;
+
+        while (*cache_stat_tmp != ' ' && *cache_stat_tmp != '\0')
+            cache_stat_tmp++;
+        if (*cache_stat_tmp == '\0')
+            break;
+        *(cache_stat_tmp++) = '\0';
+        while (*cache_stat_tmp == ' ')
+            cache_stat_tmp++;
+
+        if (count == 2)
+            kstrtoll(cache_counter, 10, &cache_read_sectors_new);
+        else if (count == 6)
+            kstrtoll(cache_counter, 10, &cache_write_sectors_new);
+    }
+
+    core_stat_tmp = core_stat_buf;
+    while (*core_stat_tmp == ' ')
+        core_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        core_counter = core_stat_tmp;
+
+        while (*core_stat_tmp != ' ' && *core_stat_tmp != '\0')
+            core_stat_tmp++;
+        if (*core_stat_tmp == '\0')
+            break;
+        *(core_stat_tmp++) = '\0';
+        while (*core_stat_tmp == ' ')
+            core_stat_tmp++;
+
+        if (count == 2)
+            kstrtoll(core_counter, 10, &core_read_sectors_new);
+        else if (count == 6)
+            kstrtoll(core_counter, 10, &core_write_sectors_new);
+    }
+    //*/
+    
+    cas_stat_tmp = cas_stat_buf;
+    while (*cas_stat_tmp == ' ')
+        cas_stat_tmp++;
+    for (count = 0; count < 7; ++count) {
+        cas_counter = cas_stat_tmp;
+
+        while (*cas_stat_tmp != ' ' && *cas_stat_tmp != '\0')
+            cas_stat_tmp++;
+        if (*cas_stat_tmp == '\0')
+            break;
+        *(cas_stat_tmp++) = '\0';
+        while (*cas_stat_tmp == ' ')
+            cas_stat_tmp++;
+
+        if (count == 2)
+            kstrtoll(cas_counter, 10, &cas_read_sectors_new);
+        else if (count == 6)
+            kstrtoll(cas_counter, 10, &cas_write_sectors_new);
+	else if (count == 0)
+            kstrtoll(cas_counter, 10, &cas_read_requests_new);
+	else if (count == 3)
+            kstrtoll(cas_counter, 10, &cas_read_ticks_new);
+    }
+    
+    //printk("MONITOR: Measured throughput: new cas time: %lld, new cas read sectors: %lld, new cas read ticks: %lld, new cas read requests: %lld, new cas write sectors: %lld, new cache write sectors: %lld", new_time_ms, cas_read_sectors_new, cas_read_ticks_new, cas_read_requests_new, cas_write_sectors_new, cache_write_sectors_new);
+
+    if (new_time_ms > old_time_ms) {
+        cache_tp+= (int64_t) (500
+                      * ((cache_read_sectors_new - cache_read_sectors_old)
+                      + (cache_write_sectors_new - cache_write_sectors_old)))
+                      / (new_time_ms  - old_time_ms);
+        core_tp += (int64_t) (500
+                      * ((core_read_sectors_new - core_read_sectors_old)
+                      + (core_write_sectors_new - core_write_sectors_old)))
+                      / (new_time_ms  - old_time_ms);
+        
+        throughput += (int64_t) (500
+                      * (cas_read_sectors_new - cas_read_sectors_old))
+                      / (new_time_ms  - old_time_ms);
+        if (cas_read_requests_new != cas_read_requests_old) {
+	        latency += (int64_t) (1000 * (cas_read_ticks_new - cas_read_ticks_old)) 
+		       / (cas_read_requests_new - cas_read_requests_old);
+	    }
+    }
+    printk("MONITOR: Measured agg throughput: %lld, agg latency %lld us, cache throughput: %lld, core throughput: %lld, for load admit %d", throughput, latency, cache_tp, core_tp, load_admit);
+    *tp_ptr = throughput;
+    *la_ptr = latency;
+    *cache_tp_ptr = cache_tp;
+    *core_tp_ptr = core_tp;
+    return;
+}
+
+
+// int __gt(void *lhs, void* rhs) {
+//     return *((uint64_t *)lhs) < *((uint64_t *)rhs);
+// }
+
+static uint64_t _get_tail_latency(int percentage) {
+    int size = 0, i = 0, start = 0;
+    struct ptr_heap max_heap;
+    size_t heap_size = 0;
+    uint64_t avg_tail_latency = 0, tmp = 0, avg_latency = 0;
+    if (percentage > 100 || percentage < 0)
+        return ULONG_MAX;
+
+    env_rwlock_read_lock(&latency_vec_lock);
+    start = log_tail;
+
+    if (is_full) {
+        env_rwlock_read_unlock(&latency_vec_lock);
+        size = MAX_LOG_SIZE;
+    } else {
+        env_rwlock_read_unlock(&latency_vec_lock);
+        size = start + 1;
+    }
+
+    heap_size = size * (100 - percentage) / 100;
+    // printk(KERN_DEBUG "[_get_tail_latency] heap size:%ld, total logs: %d\n", heap_size, size);
+    if (heap_size == 0) return ULONG_MAX;
+    if (heap_init(&max_heap, heap_size * sizeof(uint64_t), GFP_KERNEL) < 0) {
+        printk(KERN_DEBUG "[_get_tail_latency] Run out of memeory\n");
+        return ULONG_MAX;
+    }
+
+    for ( ;i < size; i ++) {
+        // env_rwlock_read_lock(&latency_vec_lock);
+        tmp = latency_vec[start];
+        // env_rwlock_read_unlock(&latency_vec_lock);
+        avg_latency += tmp;
+        heap_insert(&max_heap, tmp);
+        if (start <= 0) start = MAX_LOG_SIZE;
+        else start = (start - 1) % MAX_LOG_SIZE;
+    }
+    i = 0;
+
+    for (; i < max_heap.size; i++) {
+        avg_tail_latency += max_heap.ptrs[i];
+    }
+    avg_tail_latency = avg_tail_latency / max_heap.size;
+    // printk(KERN_DEBUG "[_get_tail_latency] Average tail latency:%lld, Average latency:%lld, Number of requests:%d\n", avg_tail_latency, avg_latency / size, size);
+    heap_free(&max_heap);
+    env_rwlock_write_lock(&latency_vec_lock);
+    log_tail = -1;
+    is_full = 0;
+    env_rwlock_write_unlock(&latency_vec_lock);
+    return avg_tail_latency;
+}
+
+
 /**
  * Set `load_admit` to a value for a while and measure the throughput
  * in KiB/s.
@@ -925,12 +1213,19 @@ monitor_wait_stable(ocf_core_t core)
         miss_ratio = _get_miss_ratio(core);
 
         if (MONITOR_VERBOSE_LOG) {
-            printk(KERN_ALERT "MONITOR: (wait) miss ratio = %-5d -> %-5d\n",
+            printk(KERN_DEBUG "MONITOR: (wait) miss ratio = %-5d -> %-5d\n",
                    last_miss_ratio, miss_ratio);
         }
     }
 
     return miss_ratio;
+}
+
+uint64_t monitor_measure_tail_latency(int load_admit) {
+    monitor_set_load_admit(load_admit);
+    usleep_range(MEASURE_THROUGHPUT_INTERVAL_US,
+                 MEASURE_THROUGHPUT_INTERVAL_US + 1);
+    return _get_tail_latency(99); 
 }
 
 /**
@@ -1049,7 +1344,127 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
                 continue;
             } else {
                 if (MONITOR_VERBOSE_LOG) {
-                    printk(KERN_ALERT "MONITOR: (tune) load_admit stays 100%%, "
+                    printk(KERN_DEBUG "MONITOR: (tune) load_admit stays 100%%, "
+                                      "quit\n");
+                }
+                return;
+            }
+        }
+    }
+}
+
+
+/**
+ * Repeatedly tune `load_admit` ratio until a workload change is
+ * considered happened.
+ */
+static void
+monitor_tune_load_admit_tail_latency(int base_miss_ratio, ocf_core_t core)
+{
+    int la1, la2, la3;
+    uint64_t tla1, tla2, tla3;
+    int chances = NOT_QUIT_ON_100_CHANCES;
+    uint64_t iteration = 0;
+
+    while (1) {
+        if (kthread_should_stop())
+            return;
+
+        iteration++;
+
+        /** Get middle ratio (current `load_admit`) throughput. */
+        la2 = monitor_query_load_admit();
+        if (MONITOR_VERBOSE_LOG && iteration % 100 == 1) {
+            printk(KERN_ALERT "MONITOR: (tune) iter #%lld: load_admit = %-5d\n",
+                   iteration, la2);
+        }
+        tla2 = monitor_measure_tail_latency(la2);
+
+        /** Get higher ratio throughput. */
+        la3 = la2 + LOAD_ADMIT_TUNING_STEP;
+        tla3 = la3 > 10000 ? ULONG_MAX : monitor_measure_tail_latency(la3);
+
+        /** Get lower ratio throughput. */
+        la1 = la2 - LOAD_ADMIT_TUNING_STEP;
+        tla1 = la1 < 0     ? ULONG_MAX : monitor_measure_tail_latency(la1);
+
+        monitor_set_load_admit(la2);    /** Recover. */
+
+        /** Slope following loop. */
+        while (1) {
+            /**
+             * Workload change check:
+             * If detected workload change, quit and re-optimize.
+             */
+            int miss_ratio = _get_miss_ratio(core);
+            if (miss_ratio > MISS_RATIO_TUNING_BOUND
+                || miss_ratio > base_miss_ratio + WORKLOAD_CHANGE_THRESHOLD
+                || miss_ratio < base_miss_ratio - WORKLOAD_CHANGE_THRESHOLD) {
+                if (MONITOR_VERBOSE_LOG) {
+                    printk(KERN_DEBUG "MONITOR: (tune) miss ratio changed too"
+                                      " far, quit\n");
+                }
+                return;
+            }
+
+            if (kthread_should_stop())
+                return;
+
+            /**
+             * Middle ratio yields best throughput, goto intensity check.
+             */
+            if (tla2 <= tla1 && tla2 <= tla3) {
+                monitor_set_load_admit(la2);
+                break;
+            }
+
+            /**
+             * Higher ratio yields best throughput, then shift to higher
+             * `load_admit` value.
+             */
+            if (tla3 <= tla1 && tla3 <= tla2) {
+                if (la3 >= 10000) {
+                    monitor_set_load_admit(10000);
+                    break;
+                } else {
+                    la1 = la2; tla1 = tla2;
+                    la2 = la3; tla2 = tla3;
+                    la3 = la3 + LOAD_ADMIT_TUNING_STEP;
+                    tla3 = la3 > 10000 ? ULONG_MAX : monitor_measure_tail_latency(la3);
+                    continue;
+                }
+            }
+
+            /**
+             * Lower ratio yields best throughput, then shift to lower
+             * `load_admit` value.
+             */
+            if (tla1 <= tla2 && tla1 <= tla3) {
+                if (la1 <= 0) {
+                    monitor_set_load_admit(0);
+                    break;
+                } else {
+                    la3 = la2; tla3 = tla2;
+                    la2 = la1; tla2 = tla1;
+                    la1 = la1 - LOAD_ADMIT_TUNING_STEP;
+                    tla1 = la1 < 0     ? ULONG_MAX : monitor_measure_tail_latency(la1);
+                    continue;
+                }
+            }
+        }
+
+        /**
+         * Intensity check:
+         * If client's request intensity cannot fill cache bandwidth, then fall
+         * back to classic caching.
+         */
+        if (monitor_query_load_admit() == 10000) {
+            if (chances > 0) {      /** Give a second chance. */
+                chances--;
+                continue;
+            } else {
+                if (MONITOR_VERBOSE_LOG) {
+                    printk(KERN_DEBUG "MONITOR: (tune) load_admit stays 100%%, "
                                       "quit\n");
                 }
                 return;
@@ -1063,9 +1478,12 @@ monitor_tune_load_admit(int base_miss_ratio, ocf_core_t core)
  * Monitor thread logic.
  */
 static int
-monitor_func(void *core_ptr)
+monitor_func(void *args_ptr)
 {
-    ocf_core_t core = core_ptr;
+
+    ocf_core_t core = ((struct args*)args_ptr) -> core;
+    ocf_tuning_mode_t tuning_mode = ((struct args*)args_ptr) -> tuning_mode;
+    kfree(args_ptr);
 
     while (1) {
         int base_miss_ratio;
@@ -1109,14 +1527,167 @@ monitor_func(void *core_ptr)
         /** Turn off `data_admit` and start `load_admit` tuning. */
         monitor_set_data_admit(false);
         if (MONITOR_VERBOSE_LOG) {
-            printk(KERN_ALERT "MONITOR: (tune) turn off data_admit & start "
+            printk(KERN_DEBUG "MONITOR: (tune) turn off data_admit & start "
                               "tuning\n");
         }
-        monitor_tune_load_admit(base_miss_ratio, core);
+        tune_func[(int)tuning_mode](base_miss_ratio, core);
     }
 
     return 0;
 }
+
+/*========== SIB LOGIC START ==========*/
+static int64_t bandwidth_mean = 0;
+static int64_t bandwidth_var = 0;
+static int64_t minimum_la = LONG_MAX;
+static int64_t num_elements = 0;
+
+
+static 
+int64_t get_z_score(int64_t bandwidth) {
+    if (bandwidth_var == 0) 
+        return bandwidth > bandwidth_mean * 85 / 100 ? 0 : -5;
+    return (bandwidth - bandwidth_mean) / (int64_t) int_sqrt(bandwidth_var / (num_elements - 1));
+}
+
+static
+void update_stat(int64_t tp, int64_t la) {
+    num_elements ++;
+    if (num_elements >= 2) 
+        bandwidth_var = (num_elements - 2) * bandwidth_var / (num_elements - 1) + (tp - bandwidth_mean) * (tp - bandwidth_mean) / (num_elements);
+     
+    bandwidth_mean = bandwidth_mean + (tp - bandwidth_mean) / num_elements;
+    // printk(KERN_DEBUG"bandwidth_mean update to %lld, and bandwidth_var update to %lld, tp = %lld", bandwidth_mean, bandwidth_var, tp);
+    if (la > 0) minimum_la = la < minimum_la ? la : minimum_la;
+}
+
+
+/**
+ * Monitor thread logic.
+ */
+static int
+sib_monitor_without_window_func(void *args_ptr)
+{
+    ocf_core_t core = ((struct args*)args_ptr) -> core; 
+    int64_t last_tp = -1, last_cache_tp = -1, last_core_tp = -1;
+    int64_t tp = -1, lat = -1, cache_tp = -1, core_tp = -1;
+    int64_t load_admit;
+    int8_t tendency_flag = 0;
+
+    printk(KERN_DEBUG"bandwidth_mean = %lld, bandwidth_var = %lld", bandwidth_mean, bandwidth_var);
+    while (1) {
+        monitor_set_data_admit(true);
+        monitor_wait_stable(core);
+        // Phase 1: Exploration: starting from load admit equals to 10000 and periodly tries to decrease the load admit
+        printk(KERN_DEBUG "Currently at phase 1\n");
+        monitor_set_load_admit(10000);
+        while (1) {
+            load_admit = monitor_query_load_admit();
+            if (kthread_should_stop()) {
+                env_rwlock_destroy(&data_admit_lock);
+                env_rwlock_destroy(&load_admit_lock);
+
+                file_close(cache_stat);
+                file_close(core_stat);
+                file_close(cas_stat);
+                return 0;
+            }
+
+            // Increase the bypass level and see what will happen
+
+
+            if (load_admit - LOAD_ADMIT_TUNING_STEP >= 5000)
+                monitor_measure_throughput_latency(load_admit - LOAD_ADMIT_TUNING_STEP, &tp, &cache_tp, &core_tp, &lat);
+            else 
+                monitor_measure_throughput_latency(5000, &tp, &cache_tp, &core_tp, &lat);
+
+            // Collect the data if the bandwidth increases.
+            if (last_tp != -1 && tp > last_tp) {
+                printk(KERN_DEBUG "[***]Last window: aggregate tp = %lld, cache tp = %lld, core tp = %lld\n", last_tp, last_cache_tp, last_core_tp); 
+                printk(KERN_DEBUG "[******]Current window: aggregate tp = %lld, cache tp = %lld, core tp = %lld\n", tp, cache_tp, core_tp); 
+                update_stat(cache_tp, lat);
+            } else {
+                monitor_set_load_admit(load_admit);
+            }
+            last_tp = tp;
+            last_cache_tp = cache_tp;
+            last_core_tp = core_tp;
+
+            if (num_elements > SAMPLE_NUMBER_BOUND) 
+                break;
+        }
+
+        // Phase 2: using the maximum bandwidth to determine whether we need to increase the bypass level
+
+        printk(KERN_DEBUG "Currently at phase 2\n");
+        while (1) {
+            if (kthread_should_stop()) {
+                env_rwlock_destroy(&data_admit_lock);
+                env_rwlock_destroy(&load_admit_lock);
+
+                file_close(cache_stat);
+                file_close(core_stat);
+                file_close(cas_stat);
+                return 0;
+            }
+            load_admit = monitor_query_load_admit();
+            monitor_measure_throughput_latency(load_admit, &tp, &cache_tp, &core_tp, &lat);
+            last_tp = tp;
+            last_cache_tp = cache_tp;
+            last_core_tp = core_tp;
+            printk(KERN_DEBUG "[...]latency = %lld, minimum_latency = %lld, bandwidth_mean = %lld, bandwidth_var = %lld, std = %ld, bandwidth = %lld, z-score = %lld\n", lat, minimum_la, bandwidth_mean, bandwidth_var, int_sqrt(bandwidth_var / (num_elements - 1)),cache_tp, get_z_score(cache_tp)); 
+            if (get_z_score(cache_tp) > - 4) {
+                if (lat > minimum_la) {
+                    if (tendency_flag == 3) {
+                        tendency_flag = 0;
+                        // Increase the bypass level
+                        printk(KERN_DEBUG "------> Increasing bypass level from %lld to %lld.\n", load_admit, load_admit - LOAD_ADMIT_TUNING_STEP); 
+                        if (load_admit - LOAD_ADMIT_TUNING_STEP >= 5000)
+                            monitor_measure_throughput_latency(load_admit - LOAD_ADMIT_TUNING_STEP, &tp, &cache_tp, &core_tp, &lat);
+                        else
+                            monitor_measure_throughput_latency(5000, &tp, &cache_tp, &core_tp, &lat);
+
+                        if (tp > last_tp)
+                            update_stat(cache_tp, lat);
+                        
+                    } else {
+                        tendency_flag ++;
+                    }
+                } else {
+                    tendency_flag = 0;
+                }
+            } else {
+                if (tendency_flag == -3) {
+                    // Break out of second phase since the device is under-saturaded. 
+                    printk(KERN_DEBUG "------> The device is under-saturated. Go back to phase 1\n"); 
+                    break;
+                } else {
+                    tendency_flag --;
+                }
+            }
+        }
+
+        // Reset the parameter to start from the phase 1
+        bandwidth_mean = 0;
+        bandwidth_var = 0;
+        minimum_la = LONG_MAX;
+        num_elements = 0;
+
+        last_tp = -1;
+        last_cache_tp = -1;
+        last_core_tp = -1;
+        tendency_flag = 0;
+    }
+    return 0;
+}
+
+
+int (*monitor_func_ptr[2])(void *) = 
+{
+    monitor_func,
+    sib_monitor_without_window_func,
+};
+/*========== SIB LOGIC END ==========*/
 
 /*========== Multi-factor algorithm logic END ==========*/
 
@@ -1126,8 +1697,9 @@ static struct task_struct *monitor_thread_st = NULL;
  * Setup multi-factor switches and sart the monitor thread.
  */
 int
-ocf_mngt_mf_monitor_start(ocf_core_t core)
+ocf_mngt_mf_monitor_start(ocf_core_t core, ocf_tuning_mode_t tuning_mode)
 {
+    struct args *arg; 
     if (monitor_thread_st != NULL)  // Already started.
         return 0;
     
@@ -1163,14 +1735,24 @@ ocf_mngt_mf_monitor_start(ocf_core_t core)
         return MF_MONITOR_START_ERR_CORE_STAT;
     }
 
+
+    cas_stat = file_open(CAS_STAT_FILENAME, O_RDONLY, 0);
+    if (cas_stat < 0) {
+        OCF_DEBUG_LOG(ocf_core_get_cache(core), "Unable to open cas stat");
+        return MF_MONITOR_START_ERR_CORE_STAT;
+    }
+
+    arg = (struct args*)kmalloc(sizeof(struct args), GFP_KERNEL);
+    arg -> core = core;
+    arg -> tuning_mode = tuning_mode;
     /** Create the monitor thread. */
-    monitor_thread_st = kthread_run(monitor_func, (void *) core,
+    monitor_thread_st = kthread_run(sib_monitor_without_window_func, (void *) arg,
                                     "mf_monitor_thread");
     if (monitor_thread_st == NULL)
         return MF_MONITOR_START_ERR_THREAD_RUN;
 
-    printk(KERN_ALERT "MONITOR: Thread %d started running\n",
-           monitor_thread_st->pid);
+    printk(KERN_DEBUG "MONITOR: Thread %d started running with tuning mode:%s\n",
+           monitor_thread_st->pid, tuning_mode_to_str[(int) tuning_mode]);
     return 0;
 }
 
@@ -1182,10 +1764,12 @@ ocf_mngt_mf_monitor_stop(void)
 {
     if (monitor_thread_st != NULL) {    // Only if started.
         kthread_stop(monitor_thread_st);
-        printk(KERN_ALERT "MONITOR: Thread %d stop signaled\n",
+        printk(KERN_DEBUG "MONITOR: Thread %d stop signaled\n",
                monitor_thread_st->pid);
         monitor_thread_st = NULL;
     }
 }
+
+
 
 /*========== [Orthus FLAG END] ==========*/

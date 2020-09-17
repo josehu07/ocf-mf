@@ -188,6 +188,22 @@ typedef enum {
 		/*!< Current cache mode of given cache instance */
 } ocf_cache_mode_t;
 
+/*========== [Orthus FLAG BEGIN] ==========*/
+/**
+ * OCF supported tuning method
+ */
+typedef enum {
+	ocf_mf_tp = 0,
+		/*!< Throughput mode */
+
+	ocf_mf_tail_la,
+		/*!< tail latency mode */
+	ocf_mf_avg_la,
+		/*!< Average latency mode */
+	ocf_tuning_mode_default = ocf_mf_tp,
+} ocf_tuning_mode_t;
+/*========== [Orthus FLAG END] ==========*/
+
 #define OCF_SEQ_CUTOFF_MAX_STREAMS 256
 
 typedef enum {
