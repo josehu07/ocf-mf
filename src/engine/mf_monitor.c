@@ -183,7 +183,7 @@ _get_cur_time_ms(void)
 
 
 /** For block device throughput measurement. */
-//static bool measure_latency = false;
+static bool measure_latency = true;
 static const char *CACHE_STAT_FILENAME = "/sys/block/nvme1n1/stat";
 static const char *CORE_STAT_FILENAME  = "/sys/block/nvme0n1/stat";
 static const char *CAS_STAT_FILENAME = "/sys/block/cas1-1/stat";
@@ -477,226 +477,6 @@ monitor_measure_throughput(int load_admit)
     printk("MONITOR: Measured throughput: %lld, latency %lld us, for load admit %d", throughput, latency, load_admit);
     return throughput;
 }
-
-/**
- * Set `load_admit` to a value for a while and measure the throughput
- * in KiB/s.
- *
- * Throughput measured from reading /sys/block/<dev>/stat file.
- *     - 2nd counter: read sectors  in 512 bytes
- *     - 6th counter: write sectors in 512 bytes
- *     - 9th counter: device ticks  in milliseconds
- *
- * Returns throughput as an in64_t in KiB/s.
- */
-static void
-monitor_measure_throughput_latency(int load_admit, int64_t* tp_ptr, int64_t* la_ptr)
-{
-    int64_t cache_read_sectors_old = 0, cache_write_sectors_old = 0,
-            cache_read_sectors_new = 0, cache_write_sectors_new = 0,
-            core_read_sectors_old  = 0, core_write_sectors_old  = 0,
-            core_read_sectors_new  = 0, core_write_sectors_new  = 0;
-    
-    int64_t old_time_ms = 0, new_time_ms = 0;
-    int64_t throughput = 0;
-    int64_t latency = 0;
-    
-    int64_t cas_read_sectors_old = 0, cas_write_sectors_old = 0,
-            cas_read_sectors_new = 0, cas_write_sectors_new = 0,
-            cas_read_requests_old = 0, cas_read_ticks_old = 0,
-	    cas_read_requests_new = 0, cas_read_ticks_new = 0;
-
-    
-    char *cache_stat_tmp, *core_stat_tmp;
-    char *cache_counter, *core_counter;
-
-    char *cas_stat_tmp, *cas_counter;
-    int count;
-    
-    /** Record old counters. */
-    ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
-    ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
-
-    old_time_ms = _get_cur_time_ms();
-
-    cache_stat_tmp = cache_stat_buf;
-    while (*cache_stat_tmp == ' ')
-        cache_stat_tmp++;
-    for (count = 0; count < 7; ++count) {
-        cache_counter = cache_stat_tmp;
-
-        while (*cache_stat_tmp != ' ' && *cache_stat_tmp != '\0')
-            cache_stat_tmp++;
-        if (*cache_stat_tmp == '\0')
-            break;
-        *(cache_stat_tmp++) = '\0';
-        while (*cache_stat_tmp == ' ')
-            cache_stat_tmp++;
-
-        if (count == 2)
-            kstrtoll(cache_counter, 10, &cache_read_sectors_old);
-        else if (count == 6)
-            kstrtoll(cache_counter, 10, &cache_write_sectors_old);
-    }
-
-    core_stat_tmp = core_stat_buf;
-    while (*core_stat_tmp == ' ')
-        core_stat_tmp++;
-    for (count = 0; count < 7; ++count) {
-        core_counter = core_stat_tmp;
-
-        while (*core_stat_tmp != ' ' && *core_stat_tmp != '\0')
-            core_stat_tmp++;
-        if (*core_stat_tmp == '\0')
-            break;
-        *(core_stat_tmp++) = '\0';
-        while (*core_stat_tmp == ' ')
-            core_stat_tmp++;
-
-        if (count == 2)
-            kstrtoll(core_counter, 10, &core_read_sectors_old);
-        else if (count == 6)
-            kstrtoll(core_counter, 10, &core_write_sectors_old);
-    }
-
-    
-    ENV_BUG_ON(file_read(cas_stat,  0, cas_stat_buf,  1024) <= 0);
-
-    old_time_ms = _get_cur_time_ms();
-
-    cas_stat_tmp = cas_stat_buf;
-    while (*cas_stat_tmp == ' ')
-        cas_stat_tmp++;
-    for (count = 0; count < 7; ++count) {
-        cas_counter = cas_stat_tmp;
-
-        while (*cas_stat_tmp != ' ' && *cas_stat_tmp != '\0')
-            cas_stat_tmp++;
-        if (*cas_stat_tmp == '\0')
-            break;
-        *(cas_stat_tmp++) = '\0';
-        while (*cas_stat_tmp == ' ')
-            cas_stat_tmp++;
-
-        if (count == 2)
-            kstrtoll(cas_counter, 10, &cas_read_sectors_old);
-        else if (count == 6)
-            kstrtoll(cas_counter, 10, &cas_write_sectors_old);
-	else if (count == 0)
-            kstrtoll(cas_counter, 10, &cas_read_requests_old);
-	else if (count == 3)
-            kstrtoll(cas_counter, 10, &cas_read_ticks_old);
-    }
-    
-    //printk("=== MONITOR: Measured throughput: old cas time: %lld, old cas read sectors: %lld, old cas read ticks: %lld, old cas read requests: %lld, old cas write sectors: %lld, old cache write sectors: %lld", old_time_ms, cas_read_sectors_old, cas_read_ticks_old, cas_read_requests_old, cas_write_sectors_old, cache_write_sectors_old);
-
-    /** Set `load_admit` and sleep for some time. */
-    monitor_set_load_admit(load_admit);
-    usleep_range(MEASURE_THROUGHPUT_INTERVAL_US,
-                 MEASURE_THROUGHPUT_INTERVAL_US + 1);
-
-    /** Get new counters and calculate the throughputs. */
-    ///*
-    ENV_BUG_ON(file_read(cache_stat, 0, cache_stat_buf, 1024) <= 0);
-    ENV_BUG_ON(file_read(core_stat,  0, core_stat_buf,  1024) <= 0);
-
-    new_time_ms = _get_cur_time_ms();
-
-    cache_stat_tmp = cache_stat_buf;
-    while (*cache_stat_tmp == ' ')
-        cache_stat_tmp++;
-    for (count = 0; count < 7; ++count) {
-        cache_counter = cache_stat_tmp;
-
-        while (*cache_stat_tmp != ' ' && *cache_stat_tmp != '\0')
-            cache_stat_tmp++;
-        if (*cache_stat_tmp == '\0')
-            break;
-        *(cache_stat_tmp++) = '\0';
-        while (*cache_stat_tmp == ' ')
-            cache_stat_tmp++;
-
-        if (count == 2)
-            kstrtoll(cache_counter, 10, &cache_read_sectors_new);
-        else if (count == 6)
-            kstrtoll(cache_counter, 10, &cache_write_sectors_new);
-    }
-
-    core_stat_tmp = core_stat_buf;
-    while (*core_stat_tmp == ' ')
-        core_stat_tmp++;
-    for (count = 0; count < 7; ++count) {
-        core_counter = core_stat_tmp;
-
-        while (*core_stat_tmp != ' ' && *core_stat_tmp != '\0')
-            core_stat_tmp++;
-        if (*core_stat_tmp == '\0')
-            break;
-        *(core_stat_tmp++) = '\0';
-        while (*core_stat_tmp == ' ')
-            core_stat_tmp++;
-
-        if (count == 2)
-            kstrtoll(core_counter, 10, &core_read_sectors_new);
-        else if (count == 6)
-            kstrtoll(core_counter, 10, &core_write_sectors_new);
-    }
-    //*/
-    
-    ENV_BUG_ON(file_read(cas_stat,  0, cas_stat_buf,  1024) <= 0);
-    new_time_ms = _get_cur_time_ms();
-    
-    cas_stat_tmp = cas_stat_buf;
-    while (*cas_stat_tmp == ' ')
-        cas_stat_tmp++;
-    for (count = 0; count < 7; ++count) {
-        cas_counter = cas_stat_tmp;
-
-        while (*cas_stat_tmp != ' ' && *cas_stat_tmp != '\0')
-            cas_stat_tmp++;
-        if (*cas_stat_tmp == '\0')
-            break;
-        *(cas_stat_tmp++) = '\0';
-        while (*cas_stat_tmp == ' ')
-            cas_stat_tmp++;
-
-        if (count == 2)
-            kstrtoll(cas_counter, 10, &cas_read_sectors_new);
-        else if (count == 6)
-            kstrtoll(cas_counter, 10, &cas_write_sectors_new);
-	else if (count == 0)
-            kstrtoll(cas_counter, 10, &cas_read_requests_new);
-	else if (count == 3)
-            kstrtoll(cas_counter, 10, &cas_read_ticks_new);
-    }
-    
-    //printk("MONITOR: Measured throughput: new cas time: %lld, new cas read sectors: %lld, new cas read ticks: %lld, new cas read requests: %lld, new cas write sectors: %lld, new cache write sectors: %lld", new_time_ms, cas_read_sectors_new, cas_read_ticks_new, cas_read_requests_new, cas_write_sectors_new, cache_write_sectors_new);
-
-    if (new_time_ms > old_time_ms) {
-        /*throughput += (int64_t) (500
-                      * ((cache_read_sectors_new - cache_read_sectors_old)
-                      + (cache_write_sectors_new - cache_write_sectors_old)))
-                      / (new_time_ms  - old_time_ms);
-        throughput += (int64_t) (500
-                      * ((core_read_sectors_new - core_read_sectors_old)
-                      + (core_write_sectors_new - core_write_sectors_old)))
-                      / (new_time_ms  - old_time_ms);
-        */
-        throughput += (int64_t) (500
-                      * (cas_read_sectors_new - cas_read_sectors_old))
-                      / (new_time_ms  - old_time_ms);
-        if (cas_read_requests_new != cas_read_requests_old) {
-	    latency += (int64_t) (1000 
-		       * (cas_read_ticks_new - cas_read_ticks_old)) 
-		       / (cas_read_requests_new - cas_read_requests_old);
-	}
-    }
-    printk("MONITOR: Measured throughput: %lld, latency %lld us, for load admit %d", throughput, latency, load_admit);
-    *tp_ptr = throughput;
-    *la_ptr = latency;
-    return throughput;
-}
-
 
 /**
  * Set `load_admit` to a value for a while and measure the throughput
@@ -1186,7 +966,11 @@ monitor_measure_avg_latency(int load_admit)
 	    }
     }
     printk("MONITOR: Measured throughput: %lld, latency %lld us, for load admit %d", throughput, latency, load_admit);
-    return latency;
+    
+    if (measure_latency)
+        return 10000000 - latency; // transform max to min
+
+    return throughput;
 }
 
 
