@@ -34,6 +34,7 @@ static bool global_data_admit = true;
 /** `load_admit` switch, protected by a global rwlock. */
 static int global_load_admit = 10000;       // 100%.
 
+static int window_counter = 0;
 /** Reader-writer lock to protect `data_admit`. */
 static env_rwlock data_admit_lock;
 
@@ -183,8 +184,8 @@ _get_cur_time_ms(void)
 
 /** For block device throughput measurement. */
 //static bool measure_latency = false;
-static const char *CACHE_STAT_FILENAME = "/sys/block/nvme1n1/stat";
-static const char *CORE_STAT_FILENAME  = "/sys/block/nvme0n1/stat";
+static const char *CACHE_STAT_FILENAME = "/sys/block/nvme0n1/nvme0n1p2/stat";
+static const char *CORE_STAT_FILENAME  = "/sys/block/nvme0n1/nvme0n1p4/stat";
 static const char *CAS_STAT_FILENAME = "/sys/block/cas1-1/stat";
 
 static struct file *cache_stat;
@@ -214,7 +215,7 @@ static const int WORKLOAD_CHANGE_THRESHOLD = 5000;  // 50%.
 static const int LOAD_ADMIT_TUNING_STEP = 100;      // 1%.
 
 /** Measure throughput for a `load_admit` value for X microseconds. */
-static const int MEASURE_THROUGHPUT_INTERVAL_US = 50000;
+static const int MEASURE_THROUGHPUT_INTERVAL_US = 500000;
 
 /** How many chances given to not quit on `load_admit` 100%. */
 static const int NOT_QUIT_ON_100_CHANCES = 2;
@@ -229,7 +230,8 @@ _get_miss_ratio(ocf_core_t core)
     uint64_t misses = 0, total = 0;
     uint32_t i;
     int miss_ratio = 10000;
-
+	
+    window_counter += 1;
     for (i = 0; i != OCF_IO_CLASS_MAX; ++i) {
         curr = &core->counters->part_counters[i].read_reqs;
 
@@ -237,12 +239,14 @@ _get_miss_ratio(ocf_core_t core)
         misses += env_atomic64_read(&curr->full_miss);
 
         total += env_atomic64_read(&curr->total);
-
-
-	// set to zero
-	env_atomic64_set(&curr->total, 0); 
-	env_atomic64_set(&curr->partial_miss, 0); 
-	env_atomic64_set(&curr->full_miss, 0); 
+	
+	if (window_counter >= 10){
+		window_counter = 0;
+		// set to zero
+		env_atomic64_set(&curr->total, 0); 
+		env_atomic64_set(&curr->partial_miss, 0); 
+		env_atomic64_set(&curr->full_miss, 0); 
+	}
     }
 
     if (total < 0)

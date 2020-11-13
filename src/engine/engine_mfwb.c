@@ -43,15 +43,15 @@ static inline bool data_admit_allow(void)
 
 static inline bool load_admit_allow(void)
 {
-    int load_admit = monitor_query_load_admit();
+//    int load_admit = monitor_query_load_admit();
 
     int rand;
     unsigned prob;
 
     get_random_bytes(&rand, sizeof(int));
-    prob = ((unsigned) (rand % 100)) % 100 * 100;
+    prob = (unsigned) (rand % 10000);
 
-    return prob <= load_admit;
+    return prob <= 5000;
 }
 
 
@@ -209,13 +209,15 @@ static inline void _ocf_read_mfwb_submit_to_core(struct ocf_request *req,
             _ocf_read_mfwb_to_core_cmpl_do_promote(req, -OCF_ERR_NO_MEM);
             return;
         }
-
+	
+	mdelay(2);
         /** Submit read request to core device. */
         ocf_submit_volume_req(&req->core->volume, req,
                               _ocf_read_mfwb_to_core_cmpl_do_promote);
 
     /** Not doing promotion. */
     } else {
+	mdelay(2);
         ocf_submit_volume_req(&req->core->volume, req,
                               _ocf_read_mfwb_to_core_cmpl_no_promote);
     }
