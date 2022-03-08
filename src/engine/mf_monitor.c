@@ -7,7 +7,11 @@
 
 /*========== [Orthus FLAG BEGIN] ==========*/
 
-#include <stdbool.h>
+/*
+ * Commented out since recent linux kernel headers have bool type
+ * defined, which leads to compiler complaints.
+ */
+/* #include <stdbool.h> */
 #include "common.h"
 #include "cache/cache-obj.h"
 #include "core/core-obj.h"

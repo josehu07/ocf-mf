@@ -8,7 +8,12 @@
 
 /*========== [Orthus FLAG BEGIN] ==========*/
 
-#include <stdbool.h>
+/*
+ * Commented out since recent linux kernel headers have bool type
+ * defined, which leads to compiler complaints.
+ */
+/* #include <stdbool.h> */
+#include <stdlib.h>
 #include "ocf/ocf.h"
 #include "../ocf_cache_priv.h"
 #include "../ocf_request.h"

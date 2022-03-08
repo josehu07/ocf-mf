@@ -14,8 +14,8 @@
 #include <stdbool.h>
 
 
-bool monitor_query_data_admit();
-double monitor_query_load_admit();
+bool monitor_query_data_admit(void);
+double monitor_query_load_admit(void);
 
 
 #endif /* MF_MONITOR_H_ */
